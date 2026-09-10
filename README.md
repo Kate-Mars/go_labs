@@ -19,7 +19,7 @@ go mod init github.com/<ваш-логин>/<ваш-репозиторий>
 Путь модуля потом не меняется — иначе придётся править все импорты. Проще всего
 взять адрес своего репозитория, каким бы он ни был.
 
-Дальше — [`docs/getting-started.md`](https://github.com/course-go-autumn-2026/course/blob/main/docs/getting-started.md)
+Дальше — [`homework/docs/getting-started.md`](https://github.com/course-go-autumn-2026/course/blob/main/homework/docs/getting-started.md)
 в репозитории курса: инструменты, окружение, миграции, вид сданной работы.
 
 ## Где что лежит
@@ -27,8 +27,8 @@ go mod init github.com/<ваш-логин>/<ваш-репозиторий>
 | Что | Где |
 |---|---|
 | Задания, документация, контракты | [`course-go-autumn-2026/course`](https://github.com/course-go-autumn-2026/course) |
-| Слайды и записи лекций | [`course/lections`](https://github.com/course-go-autumn-2026/course/tree/main/lections) |
-| Как оценивают, дедлайны, порядок сдачи | [`course/docs/grading.md`](https://github.com/course-go-autumn-2026/course/blob/main/docs/grading.md) |
+| Слайды и записи лекций | [`lections/`](https://github.com/course-go-autumn-2026/course/tree/main/lections) |
+| Как оценивают, дедлайны, порядок сдачи | [`homework/docs/grading.md`](https://github.com/course-go-autumn-2026/course/blob/main/homework/docs/grading.md) |
 | Локальное окружение и утилита `tripgoctl` | [`course-go-autumn-2026/course-infra`](https://github.com/course-go-autumn-2026/course-infra) |
 
 Задания появляются по мере курса, каждое — после своей пары лекций.
