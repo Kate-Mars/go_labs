@@ -9,7 +9,6 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Kate-Mars/go_labs/internal/domain/trip"
@@ -190,17 +189,4 @@ func scanTrip(row pgx.Row) (*trip.Trip, error) {
 	}
 	t.Status = trip.Status(status)
 	return &t, nil
-}
-
-// isDriverBusy(err error) bool
-
-func isDriverBusy(err error) bool {
-	var pgErr *pgconn.PgError
-	if !errors.As(err, &pgErr) {
-		return false
-	}
-	if pgErr.Code != pgUniqueViolation {
-		return false
-	}
-	return pgErr.ConstraintName == driverActiveUniqIndex
 }

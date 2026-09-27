@@ -50,6 +50,13 @@ var (
 		code:   "internal_error",
 		slug:   "internal-error",
 	}
+
+	specIdempotencyConflict = problemSpec{
+		status: http.StatusConflict,
+		title:  "Idempotency conflict",
+		code:   "idempotency_conflict",
+		slug:   "idempotency-conflict",
+	}
 )
 
 // writeProblem(w http.ResponseWriter, log *slog.Logger, r *http.Request, spec problemSpec, detail string)
@@ -84,6 +91,10 @@ func writeDomainError(w http.ResponseWriter, log *slog.Logger, r *http.Request, 
 		return true
 	case errors.Is(err, trip.ErrAlreadyDone):
 		writeProblem(w, log, r, specTripCompleted, "Operation is not allowed for a completed trip")
+		return true
+	case errors.Is(err, trip.ErrIdempotencyConflict):
+		writeProblem(w, log, r, specIdempotencyConflict,
+			"Idempotency-Key was already used with a different request body")
 		return true
 	default:
 		return false

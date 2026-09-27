@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -26,4 +27,20 @@ func withTx(ctx context.Context, tx pgx.Tx) context.Context {
 func txFromContext(ctx context.Context) (pgx.Tx, bool) {
 	tx, ok := ctx.Value(txKey{}).(pgx.Tx)
 	return tx, ok
+}
+
+// isDriverBusy(err error) bool
+
+func isDriverBusy(err error) bool {
+	return isUniqueViolation(err, driverActiveUniqIndex)
+}
+
+// isUniqueViolation(err error, constraint string) bool
+
+func isUniqueViolation(err error, constraint string) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	return pgErr.Code == pgUniqueViolation && pgErr.ConstraintName == constraint
 }

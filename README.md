@@ -199,6 +199,26 @@ seq 2 | xargs -P2 -I{} curl -s -o /dev/null -w '%{http_code}\n' \
 #       1 200
 #       1 409
 ```
+### Конкурентный create с одним Idempotency-Key
+
+5 параллельных запросов с одним ключом на одного водителя — один `201`,
+остальные `200`, вторая поездка не создаётся:
+
+```bash
+CONC_DRIVER=$(uuidgen)
+KEY2=$(uuidgen)
+echo "{\"user_id\":\"5cb72c04-7650-45c9-a79b-bcdba0631e0c\",\"driver_id\":\"$CONC_DRIVER\",\"start_point\":{\"latitude\":59.9,\"longitude\":30.3},\"end_point\":{\"latitude\":59.9,\"longitude\":30.4},\"price\":100}" > /tmp/body.json
+
+seq 5 | xargs -P5 -I{} curl -s -o /dev/null -w '%{http_code}\n' \
+  -X POST localhost:8080/api/v1/trips \
+  -H 'content-type: application/json' \
+  -H "Idempotency-Key: $KEY2" \
+  -d @/tmp/body.json | sort | uniq -c
+#       1 201
+#       4 200
+
+psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM trips WHERE driver_id = '$CONC_DRIVER';"
+# 1
 
 ---
 
@@ -309,6 +329,25 @@ CREATE UNIQUE INDEX trips_one_active_per_driver_uniq
 считается новым и создаёт новую поездку. В ЛР1 фоновой очистки нет - таблица
 растёт; поле `created_at` и индекс по нему уже есть, чтобы реализовать очистку
 в следующих работах.
+
+**Почему SAVEPOINT.** В PostgreSQL любая ошибка внутри транзакции
+(включая `23505` — нарушение уникальности) переводит её в состояние
+`aborted`: до `ROLLBACK` или `ROLLBACK TO SAVEPOINT` ни одна команда
+в ней не выполняется — попытка получит `SQLSTATE 25P02`.
+
+Сценарий гонки: два параллельных запроса с одним ключом. Первый занимает
+ключ, второй при `INSERT` получает `23505`. Если после этого сразу
+попытаться прочитать запись через `SELECT` в той же транзакции — получим
+`25P02`, а не запись.
+
+Поэтому перед `INSERT` ключа ставится `SAVEPOINT idem_insert`,
+а при `23505` — `ROLLBACK TO SAVEPOINT idem_insert`. После отката
+до точки транзакция снова рабочая, `SELECT` в ней выполняется корректно,
+и мы возвращаем существующую поездку (`200`).
+
+Вся логика идемпотентности выполняется в одной транзакции: `SAVEPOINT`,
+`INSERT` ключа, `INSERT` поездки, запись в журнал, `UPDATE trip_id`,
+`COMMIT`. Если что-то падает, откатывается всё, ключ освобождается.
 
 ---
 

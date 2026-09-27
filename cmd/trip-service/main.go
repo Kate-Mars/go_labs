@@ -33,8 +33,8 @@ func main() {
 
 	txManager := postgres.NewTxManager(pool)
 	repo := postgres.NewTripRepository(pool)
-
-	router := httptransport.NewRouter(log, repo, txManager)
+	idemRepo := postgres.NewIdempotencyRepository(pool)
+	router := httptransport.NewRouter(log, repo, idemRepo, txManager)
 	srv := httptransport.NewServer(cfg.HTTPAddr, log, router)
 
 	errCh := make(chan error, 1)

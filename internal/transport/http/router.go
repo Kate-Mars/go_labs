@@ -11,14 +11,18 @@ import (
 	"github.com/Kate-Mars/go_labs/internal/repository/postgres"
 )
 
-func NewRouter(log *slog.Logger, repo *postgres.TripRepository, txManager postgres.TxManager) http.Handler {
+func NewRouter(
+	log *slog.Logger,
+	repo *postgres.TripRepository,
+	idemRepo *postgres.IdempotencyRepository,
+	txManager postgres.TxManager,
+) http.Handler {
 	r := chi.NewRouter()
-
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 
-	handlers := NewHandlers(log, repo, txManager)
+	handlers := NewHandlers(log, repo, idemRepo, txManager)
 
 	api.HandlerWithOptions(handlers, api.ChiServerOptions{
 		BaseRouter: r,
@@ -26,6 +30,5 @@ func NewRouter(log *slog.Logger, repo *postgres.TripRepository, txManager postgr
 			writeProblem(w, log, r, specInvalidRequest, "Request validation failed")
 		},
 	})
-
 	return r
 }
