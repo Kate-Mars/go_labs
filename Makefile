@@ -11,5 +11,11 @@ generate: tools
 migrate:
 	go tool goose -dir migrations postgres "$(DATABASE_URL)" up
 
+migrate-down:
+	go tool goose -dir migrations postgres "$(DATABASE_URL)" down
+
+migrate-reset:
+	go tool goose -dir migrations postgres "$(DATABASE_URL)" down-to 0
+
 run:
 	go run ./cmd/trip-service
