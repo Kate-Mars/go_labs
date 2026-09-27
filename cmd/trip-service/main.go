@@ -10,11 +10,12 @@ import (
 	"syscall"
 
 	"github.com/Kate-Mars/go_labs/internal/config"
+	"github.com/Kate-Mars/go_labs/internal/repository/postgres"
 	httptransport "github.com/Kate-Mars/go_labs/internal/transport/http"
 )
 
 func main() {
-	loadDotEnv(".env") // локально; в проде файла нет — просто ничего не делает
+	loadDotEnv(".env")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -24,7 +25,13 @@ func main() {
 
 	log := newLogger(cfg.LogLevel)
 
-	router := httptransport.NewRouter(log)
+	pool, err := postgres.NewPool(context.Background(), cfg)
+	if err != nil {
+		log.Error("postgres connect failed", "err", err)
+		os.Exit(1)
+	}
+
+	router := httptransport.NewRouter(log, pool)
 	srv := httptransport.NewServer(cfg.HTTPAddr, log, router)
 
 	errCh := make(chan error, 1)
@@ -39,6 +46,7 @@ func main() {
 	case err := <-errCh:
 		if err != nil {
 			log.Error("http server failed", "err", err)
+			pool.Close()
 			os.Exit(1)
 		}
 	case sig := <-stop:
@@ -50,8 +58,11 @@ func main() {
 
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Error("graceful shutdown failed", "err", err)
+		pool.Close()
 		os.Exit(1)
 	}
+
+	pool.Close()
 	log.Info("server stopped")
 }
 
