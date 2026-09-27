@@ -19,7 +19,13 @@ func NewRouter(log *slog.Logger, repo *postgres.TripRepository, txManager postgr
 	r.Use(middleware.Recoverer)
 
 	handlers := NewHandlers(log, repo, txManager)
-	api.HandlerFromMux(handlers, r)
+
+	api.HandlerWithOptions(handlers, api.ChiServerOptions{
+		BaseRouter: r,
+		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			writeProblem(w, log, r, specInvalidRequest, "Request validation failed")
+		},
+	})
 
 	return r
 }
