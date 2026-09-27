@@ -1,0 +1,26 @@
+# git
+.git
+.gitignore
+
+# CI/IDE
+.idea/
+.vscode/
+*.swp
+
+# local
+.env
+.tripgo/
+environment.toml
+
+# bin
+bin/
+trip-service
+
+# tests
+*_test.go
+*.md
+!README.md
+
+# others
+Makefile
+config/trip-service.env.example
