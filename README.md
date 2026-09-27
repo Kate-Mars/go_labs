@@ -349,6 +349,18 @@ CREATE UNIQUE INDEX trips_one_active_per_driver_uniq
 `INSERT` ключа, `INSERT` поездки, запись в журнал, `UPDATE trip_id`,
 `COMMIT`. Если что-то падает, откатывается всё, ключ освобождается.
 
+## Docker (задание со звёздочкой)
+
+Сервис собирается многостадийно: компиляция в `golang:1.24-alpine`,
+запуск — в `gcr.io/distroless/static-debian12:nonroot`. В итоговом образе нет
+исходников, go toolchain и shell; процесс работает не от root.
+
+### Сборка
+
+```bash
+docker build -t trip-service:local .
+```
+
 ---
 
 ## Структура репозитория

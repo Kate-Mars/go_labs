@@ -1,9 +1,15 @@
-.PHONY: generate migrate run tools
+.PHONY: generate migrate run tools docker-build docker-run
 
 ifneq (,$(wildcard .env))
     include .env
     export
 endif
+
+docker-build:
+	docker build -t trip-service:local .
+
+docker-run:
+	docker run --rm -it --network host --env-file .env trip-service:local
 
 tools:
 	go get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
