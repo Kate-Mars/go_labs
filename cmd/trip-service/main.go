@@ -31,7 +31,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	router := httptransport.NewRouter(log, pool)
+	txManager := postgres.NewTxManager(pool)
+	repo := postgres.NewTripRepository(pool)
+
+	router := httptransport.NewRouter(log, repo, txManager)
 	srv := httptransport.NewServer(cfg.HTTPAddr, log, router)
 
 	errCh := make(chan error, 1)

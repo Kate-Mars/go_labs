@@ -7,18 +7,24 @@ import (
 	"net/http"
 	"time"
 
-	api "github.com/Kate-Mars/go_labs/internal/api"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
+
+	api "github.com/Kate-Mars/go_labs/internal/api"
+	"github.com/Kate-Mars/go_labs/internal/repository/postgres"
 )
 
 type Handlers struct {
-	log  *slog.Logger
-	pool *pgxpool.Pool
+	log       *slog.Logger
+	repo      *postgres.TripRepository
+	txManager postgres.TxManager
 }
 
-func NewHandlers(log *slog.Logger, pool *pgxpool.Pool) *Handlers {
-	return &Handlers{log: log, pool: pool}
+func NewHandlers(log *slog.Logger, repo *postgres.TripRepository, txManager postgres.TxManager) *Handlers {
+	return &Handlers{
+		log:       log,
+		repo:      repo,
+		txManager: txManager,
+	}
 }
 
 // --- Service ---
@@ -31,7 +37,7 @@ func (h *Handlers) Ready(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
-	if err := h.pool.Ping(ctx); err != nil {
+	if err := h.repo.Ping(ctx); err != nil {
 		h.log.Warn("ready: db ping failed", "err", err)
 		writeJSON(w, h.log, http.StatusServiceUnavailable, api.HealthResponse{Status: api.Unavailable})
 		return

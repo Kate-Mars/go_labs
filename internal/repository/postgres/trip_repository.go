@@ -77,6 +77,12 @@ func (r *TripRepository) Create(ctx context.Context, t *trip.Trip) error {
 	return nil
 }
 
+// (r *TripRepository) Ping(ctx context.Context) error
+
+func (r *TripRepository) Ping(ctx context.Context) error {
+	return r.pool.Ping(ctx)
+}
+
 // (r *TripRepository) GetByID(ctx context.Context, id uuid.UUID) (*trip.Trip, error)
 
 func (r *TripRepository) GetByID(ctx context.Context, id uuid.UUID) (*trip.Trip, error) {
