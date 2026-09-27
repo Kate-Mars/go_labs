@@ -4,29 +4,55 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+
+	"github.com/google/uuid"
+
+	api "github.com/Kate-Mars/go_labs/internal/api"
 )
 
-type healthResponse struct {
-	Status string `json:"status"`
+type Handlers struct {
+	log *slog.Logger
 }
 
-// healthHandler(log *slog.Logger) http.HandlerFunc
-
-func healthHandler(log *slog.Logger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, log, http.StatusOK, healthResponse{Status: "ok"})
-	}
+func NewHandlers(log *slog.Logger) *Handlers {
+	return &Handlers{log: log}
 }
 
-// readyHandler(log *slog.Logger) http.HandlerFunc
+// --- Service ---
 
-func readyHandler(log *slog.Logger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, log, http.StatusOK, healthResponse{Status: "ok"})
-	}
+func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, h.log, http.StatusOK, api.HealthResponse{Status: api.Ok})
 }
 
-// writeJSON(w http.ResponseWriter, log *slog.Logger, status int, body any)
+func (h *Handlers) Ready(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, h.log, http.StatusOK, api.HealthResponse{Status: api.Ok})
+}
+
+// --- Trips (заглушки) ---
+
+func (h *Handlers) CreateTrip(w http.ResponseWriter, r *http.Request, params api.CreateTripParams) {
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (h *Handlers) GetTrip(w http.ResponseWriter, r *http.Request, tripId uuid.UUID) {
+	http.NotFound(w, r)
+}
+
+func (h *Handlers) FinishTrip(w http.ResponseWriter, r *http.Request, tripId uuid.UUID) {
+	http.NotFound(w, r)
+}
+
+// --- Positions (ЛР3, заглушки) ---
+
+func (h *Handlers) CreateTripPosition(w http.ResponseWriter, r *http.Request, tripId uuid.UUID) {
+	http.NotFound(w, r)
+}
+
+func (h *Handlers) ListTripPositions(w http.ResponseWriter, r *http.Request, tripId uuid.UUID) {
+	http.NotFound(w, r)
+}
+
+// --- helpers ---
 
 func writeJSON(w http.ResponseWriter, log *slog.Logger, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")

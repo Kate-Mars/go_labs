@@ -14,8 +14,6 @@ type Server struct {
 	log        *slog.Logger
 }
 
-// NewServer(addr string, log *slog.Logger, handler http.Handler) *Server
-
 func NewServer(addr string, log *slog.Logger, handler http.Handler) *Server {
 	return &Server{
 		httpServer: &http.Server{
@@ -30,8 +28,6 @@ func NewServer(addr string, log *slog.Logger, handler http.Handler) *Server {
 	}
 }
 
-// (s *Server) Start() error
-
 func (s *Server) Start() error {
 	s.log.Info("http server starting", "addr", s.httpServer.Addr)
 	if err := s.httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -39,8 +35,6 @@ func (s *Server) Start() error {
 	}
 	return nil
 }
-
-// (s *Server) Shutdown(ctx context.Context) error
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.log.Info("http server shutting down")

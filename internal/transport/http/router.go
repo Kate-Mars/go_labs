@@ -6,9 +6,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-)
 
-// NewRouter(log *slog.Logger) http.Handler
+	api "github.com/Kate-Mars/go_labs/internal/api"
+)
 
 func NewRouter(log *slog.Logger) http.Handler {
 	r := chi.NewRouter()
@@ -17,8 +17,8 @@ func NewRouter(log *slog.Logger) http.Handler {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 
-	r.Get("/health", healthHandler(log))
-	r.Get("/ready", readyHandler(log))
+	handlers := NewHandlers(log)
+	api.HandlerFromMux(handlers, r)
 
 	return r
 }

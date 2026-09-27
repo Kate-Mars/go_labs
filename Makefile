@@ -1,4 +1,4 @@
-.PHONY: tools generate migrate run
+.PHONY: generate migrate run tools
 
 tools:
 	go get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
