@@ -219,7 +219,7 @@ seq 5 | xargs -P5 -I{} curl -s -o /dev/null -w '%{http_code}\n' \
 
 psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM trips WHERE driver_id = '$CONC_DRIVER';"
 # 1
-
+```
 ---
 
 ## Решения
