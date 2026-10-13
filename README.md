@@ -351,9 +351,16 @@ CREATE UNIQUE INDEX trips_one_active_per_driver_uniq
 
 ## Docker (задание со звёздочкой)
 
-Сервис собирается многостадийно: компиляция в `golang:1.24-alpine`,
+Сервис собирается многостадийно: компиляция в `golang:1.27-alpine`,
 запуск — в `gcr.io/distroless/static-debian12:nonroot`. В итоговом образе нет
 исходников, go toolchain и shell; процесс работает не от root.
+
+### Размер образа
+
+```bash
+docker images trip-service:local
+```
+Размер: 24.5MB
 
 ### Сборка
 
@@ -389,7 +396,7 @@ docker build -t trip-service:local .
     make generate
 ```
 
-Конфигурация - в `config/oapi-codegen.yaml`, выход - `internal/api/server.gen.go`.
+Конфигурация — в `config/oapi-codegen.yaml`, выход — `internal/generated/api.gen.go`.
 Файл коммитится, но руками не правится: при следующем `make generate` правки
 затрутся.
 

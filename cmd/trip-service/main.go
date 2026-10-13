@@ -1,21 +1,23 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"log/slog"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/Kate-Mars/go_labs/internal/config"
 	"github.com/Kate-Mars/go_labs/internal/repository/postgres"
 	httptransport "github.com/Kate-Mars/go_labs/internal/transport/http"
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	loadDotEnv(".env")
+	_ = godotenv.Load(".env")
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
+		slog.Warn("failed to load .env", "err", err)
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -67,32 +69,6 @@ func main() {
 
 	pool.Close()
 	log.Info("server stopped")
-}
-
-// loadDotEnv(path string)
-func loadDotEnv(path string) {
-	f, err := os.Open(path)
-	if err != nil {
-		return // нет файла — ок
-	}
-	defer f.Close()
-
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		k, v, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		k = strings.TrimSpace(k)
-		v = strings.Trim(strings.TrimSpace(v), `"'`)
-		if _, exists := os.LookupEnv(k); !exists {
-			os.Setenv(k, v)
-		}
-	}
 }
 
 func newLogger(level string) *slog.Logger {

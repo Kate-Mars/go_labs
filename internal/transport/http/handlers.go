@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,8 +12,8 @@ import (
 
 	"github.com/google/uuid"
 
-	api "github.com/Kate-Mars/go_labs/internal/api"
 	"github.com/Kate-Mars/go_labs/internal/domain/trip"
+	api "github.com/Kate-Mars/go_labs/internal/generated"
 	"github.com/Kate-Mars/go_labs/internal/repository/postgres"
 )
 
@@ -120,24 +119,22 @@ func (h *Handlers) createTripIdempotent(
 ) {
 	requestHash := sha256.Sum256(mustJSON(body))
 
-	const spName = "idem_insert"
-
 	var (
 		result *trip.Trip
 		replay bool
 	)
 
 	err := h.txManager.Do(r.Context(), func(ctx context.Context) error {
-		if err := h.idemRepo.Savepoint(ctx, spName); err != nil {
-			return err
-		}
-
-		insertErr := h.idemRepo.Insert(ctx, postgres.IdempotencyRecord{
+		inserted, err := h.idemRepo.InsertIfAbsent(ctx, postgres.IdempotencyRecord{
 			Key:         key,
 			TripID:      nil,
 			RequestHash: requestHash[:],
 		})
-		if insertErr == nil {
+		if err != nil {
+			return err
+		}
+
+		if inserted {
 			t, err := h.createTripInTx(ctx, body)
 			if err != nil {
 				return err
@@ -147,14 +144,6 @@ func (h *Handlers) createTripIdempotent(
 			}
 			result = t
 			return nil
-		}
-
-		if rbErr := h.idemRepo.RollbackToSavepoint(ctx, spName); rbErr != nil {
-			return rbErr
-		}
-
-		if !errors.Is(insertErr, postgres.ErrIdempotencyKeyExists) {
-			return insertErr
 		}
 
 		rec, err := h.idemRepo.Get(ctx, key)
@@ -171,7 +160,6 @@ func (h *Handlers) createTripIdempotent(
 		if rec.TripID == nil {
 			return trip.ErrIdempotencyConflict
 		}
-
 		t, err := h.repo.GetByID(ctx, *rec.TripID)
 		if err != nil {
 			return err

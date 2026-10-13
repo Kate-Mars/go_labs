@@ -133,12 +133,8 @@ func (r *TripRepository) Finish(ctx context.Context, id uuid.UUID, now time.Time
 	}
 
 	if tag.RowsAffected() == 0 {
-		current, err := r.GetByID(ctx, id)
-		if err != nil {
+		if _, err := r.GetByID(ctx, id); err != nil {
 			return err
-		}
-		if current.Status == trip.StatusCompleted {
-			return trip.ErrAlreadyDone
 		}
 		return trip.ErrAlreadyDone
 	}

@@ -8,13 +8,10 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const idempotencyTable = "idempotency_keys"
-
-var ErrIdempotencyKeyExists = errors.New("idempotency key already exists")
 
 type IdempotencyRecord struct {
 	Key         uuid.UUID
@@ -68,26 +65,24 @@ func (r *IdempotencyRepository) Get(ctx context.Context, key uuid.UUID) (*Idempo
 	return &rec, nil
 }
 
-// (r *IdempotencyRepository) Insert(ctx context.Context, rec IdempotencyRecord) error
+// (r *IdempotencyRepository) InsertIfAbsent(ctx context.Context, rec IdempotencyRecord) (bool, error)
 
-func (r *IdempotencyRepository) Insert(ctx context.Context, rec IdempotencyRecord) error {
+func (r *IdempotencyRepository) InsertIfAbsent(ctx context.Context, rec IdempotencyRecord) (bool, error) {
 	q, args, err := r.sb.
 		Insert(idempotencyTable).
 		Columns("key", "trip_id", "request_hash").
 		Values(rec.Key, rec.TripID, rec.RequestHash).
+		Suffix("ON CONFLICT (key) DO NOTHING").
 		ToSql()
 	if err != nil {
-		return fmt.Errorf("build insert idempotency: %w", err)
+		return false, fmt.Errorf("build insert idempotency: %w", err)
 	}
 
-	_, err = r.exec(ctx).Exec(ctx, q, args...)
+	tag, err := r.exec(ctx).Exec(ctx, q, args...)
 	if err != nil {
-		if isUniqueViolation(err, "idempotency_keys_pkey") {
-			return ErrIdempotencyKeyExists
-		}
-		return fmt.Errorf("insert idempotency: %w", err)
+		return false, fmt.Errorf("insert idempotency: %w", err)
 	}
-	return nil
+	return tag.RowsAffected() == 1, nil
 }
 
 // (r *IdempotencyRepository) SetTripID(ctx context.Context, key, tripID uuid.UUID) error
@@ -106,23 +101,3 @@ func (r *IdempotencyRepository) SetTripID(ctx context.Context, key, tripID uuid.
 	}
 	return nil
 }
-
-// (r *IdempotencyRepository) Savepoint(ctx context.Context, name string) error
-
-func (r *IdempotencyRepository) Savepoint(ctx context.Context, name string) error {
-	if _, err := r.exec(ctx).Exec(ctx, "SAVEPOINT "+name); err != nil {
-		return fmt.Errorf("savepoint %s: %w", name, err)
-	}
-	return nil
-}
-
-//  (r *IdempotencyRepository) RollbackToSavepoint(ctx context.Context, name string) error
-
-func (r *IdempotencyRepository) RollbackToSavepoint(ctx context.Context, name string) error {
-	if _, err := r.exec(ctx).Exec(ctx, "ROLLBACK TO SAVEPOINT "+name); err != nil {
-		return fmt.Errorf("rollback to savepoint %s: %w", name, err)
-	}
-	return nil
-}
-
-var _ pgconn.CommandTag

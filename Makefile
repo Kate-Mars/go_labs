@@ -16,8 +16,8 @@ tools:
 	go get -tool github.com/pressly/goose/v3/cmd/goose
 	go get -tool go.uber.org/mock/mockgen
 
-generate: tools
-	go tool oapi-codegen -generate types,chi-server -package api -o internal/generated/api.gen.go contracts/openapi/trip-service.openapi.yaml
+generate:
+	go tool oapi-codegen -config config/oapi-codegen.yaml contracts/openapi/trip-service.openapi.yaml
 
 migrate:
 	go tool goose -dir migrations postgres "$(DATABASE_URL)" up

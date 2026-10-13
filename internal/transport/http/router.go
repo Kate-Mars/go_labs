@@ -7,7 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	api "github.com/Kate-Mars/go_labs/internal/api"
+	api "github.com/Kate-Mars/go_labs/internal/generated"
 	"github.com/Kate-Mars/go_labs/internal/repository/postgres"
 )
 

@@ -3,7 +3,7 @@ package http
 import (
 	"errors"
 
-	api "github.com/Kate-Mars/go_labs/internal/api"
+	api "github.com/Kate-Mars/go_labs/internal/generated"
 	"github.com/Kate-Mars/go_labs/internal/domain/trip"
 )
 
