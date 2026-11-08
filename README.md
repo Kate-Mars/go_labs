@@ -164,7 +164,7 @@ curl -i -X POST localhost:8080/api/v1/trips/$TRIP_ID/finish
 ### Ошибки
 
 Все ошибки со стабильным полем `code`:
-
+ 
 - `400 invalid_request` - не прошла валидация тела или `tripId` не UUID;
 - `404 trip_not_found` - поездки с таким `id` нет;
 - `409 trip_completed` - попытка завершить уже завершённую поездку;
