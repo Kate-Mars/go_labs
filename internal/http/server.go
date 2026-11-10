@@ -44,20 +44,22 @@ func (s *Server) FinishTrip(w http.ResponseWriter, r *http.Request, tripId api.T
 	s.finish.Finish(w, r, tripId)
 }
 
+//nolint:unparam // r нужен по сигнатуре api.ServerInterface
 func (s *Server) Health(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, api.HealthResponse{Status: api.Ok})
 }
 
+//nolint:unparam // r нужен по сигнатуре api.ServerInterface
 func (s *Server) Ready(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, api.HealthResponse{Status: api.Ok})
 }
 
-// ЛР3
+//nolint:unparam // tripId в ЛР3
 func (s *Server) CreateTripPosition(w http.ResponseWriter, r *http.Request, tripId api.TripId) {
 	http.NotFound(w, r)
 }
 
-// ЛР3
+//nolint:unparam // tripId в ЛР3
 func (s *Server) ListTripPositions(w http.ResponseWriter, r *http.Request, tripId api.TripId) {
 	http.NotFound(w, r)
 }

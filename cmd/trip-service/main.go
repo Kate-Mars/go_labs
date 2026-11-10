@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 
@@ -32,13 +33,16 @@ func main() {
 		log.Error("container init failed", "err", err)
 		os.Exit(1)
 	}
-	defer cnt.Pool.Close()
 
-	handler := router.NewRouter(log, cnt.Router)
+	handler := router.NewRouter(cnt.Router)
 
 	srv := &http.Server{
-		Addr:    cfg.HTTPAddr,
-		Handler: handler,
+		Addr:              cfg.HTTPAddr,
+		Handler:           handler,
+		ReadTimeout:       5 * time.Second,
+		ReadHeaderTimeout: 3 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	errCh := make(chan error, 1)
@@ -49,12 +53,12 @@ func main() {
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(stop)
 
 	select {
 	case err := <-errCh:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("http server failed", "err", err)
+			cnt.Pool.Close()
 			os.Exit(1)
 		}
 	case sig := <-stop:
@@ -62,13 +66,16 @@ func main() {
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Error("graceful shutdown failed", "err", err)
+		cancel()
+		cnt.Pool.Close()
 		os.Exit(1)
 	}
 
+	cancel()
+	cnt.Pool.Close()
 	log.Info("server stopped")
 }
 

@@ -1,7 +1,6 @@
 package router
 
 import (
-	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -10,11 +9,10 @@ import (
 	api "github.com/Kate-Mars/go_labs/internal/generated"
 )
 
-func NewRouter(log *slog.Logger, s api.ServerInterface) http.Handler {
+func NewRouter(s api.ServerInterface) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 
 	api.HandlerFromMux(s, r)

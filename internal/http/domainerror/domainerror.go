@@ -38,7 +38,7 @@ func mk(status int, title, code string) api.Problem {
 	return api.Problem{
 		Type:   "https://tripgo.example/problems/" + code,
 		Title:  title,
-		Status: int32(status),
+		Status: int32(status), //nolint:gosec
 		Code:   code,
 	}
 }

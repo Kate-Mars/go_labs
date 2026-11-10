@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 
-	"github.com/Kate-Mars/go_labs/internal/infra/postgres/txctx"
 	"github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/Kate-Mars/go_labs/internal/infra/postgres/txctx"
 )
 
 const (
@@ -19,8 +20,6 @@ const (
 	pgUniqueViolation     = "23505"
 	driverActiveUniqIndex = "trips_one_active_per_driver_uniq"
 )
-
-type txKey struct{}
 
 type Repo struct {
 	pool *pgxpool.Pool

@@ -4,8 +4,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/google/uuid"
-
 	api "github.com/Kate-Mars/go_labs/internal/generated"
 	"github.com/Kate-Mars/go_labs/internal/http/common"
 	"github.com/Kate-Mars/go_labs/internal/http/domainerror"
@@ -21,9 +19,8 @@ func NewHandler(log *slog.Logger, uc *finishuc.Usecase) *Handler {
 	return &Handler{log: log, uc: uc}
 }
 
-// Finish обрабатывает POST /api/v1/trips/{tripId}/finish.
 func (h *Handler) Finish(w http.ResponseWriter, r *http.Request, tripID api.TripId) {
-	t, err := h.uc.Do(r.Context(), uuid.UUID(tripID))
+	t, err := h.uc.Do(r.Context(), tripID)
 	if err != nil {
 		status, p := domainerror.Problem(err)
 		if status == http.StatusInternalServerError {
