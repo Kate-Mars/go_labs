@@ -2,22 +2,22 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/Kate-Mars/go_labs/internal/config"
-	"github.com/Kate-Mars/go_labs/internal/repository/postgres"
-	httptransport "github.com/Kate-Mars/go_labs/internal/transport/http"
 	"github.com/joho/godotenv"
+
+	"github.com/Kate-Mars/go_labs/internal/config"
+	"github.com/Kate-Mars/go_labs/internal/container"
+	"github.com/Kate-Mars/go_labs/internal/http/router"
 )
 
 func main() {
-	_ = godotenv.Load(".env")
-	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
-		slog.Warn("failed to load .env", "err", err)
-	}
+	_ = godotenv.Load()
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -27,35 +27,38 @@ func main() {
 
 	log := newLogger(cfg.LogLevel)
 
-	pool, err := postgres.NewPool(context.Background(), cfg)
+	cnt, err := container.New(context.Background(), cfg, log)
 	if err != nil {
-		log.Error("postgres connect failed", "err", err)
+		log.Error("container init failed", "err", err)
 		os.Exit(1)
 	}
+	defer cnt.Pool.Close()
 
-	txManager := postgres.NewTxManager(pool)
-	repo := postgres.NewTripRepository(pool)
-	idemRepo := postgres.NewIdempotencyRepository(pool)
-	router := httptransport.NewRouter(log, repo, idemRepo, txManager)
-	srv := httptransport.NewServer(cfg.HTTPAddr, log, router)
+	handler := router.NewRouter(log, cnt.Router)
+
+	srv := &http.Server{
+		Addr:    cfg.HTTPAddr,
+		Handler: handler,
+	}
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- srv.Start()
+		log.Info("http server starting", "addr", cfg.HTTPAddr)
+		errCh <- srv.ListenAndServe()
 	}()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(stop)
 
 	select {
 	case err := <-errCh:
-		if err != nil {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("http server failed", "err", err)
-			pool.Close()
 			os.Exit(1)
 		}
 	case sig := <-stop:
-		log.Info("stop signal received", "signal", sig)
+		log.Info("stop signal received", "signal", sig.String())
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
@@ -63,11 +66,9 @@ func main() {
 
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Error("graceful shutdown failed", "err", err)
-		pool.Close()
 		os.Exit(1)
 	}
 
-	pool.Close()
 	log.Info("server stopped")
 }
 

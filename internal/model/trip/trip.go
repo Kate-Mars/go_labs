@@ -28,3 +28,10 @@ type Trip struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
+
+type StatusChange struct {
+	TripID     uuid.UUID
+	FromStatus *Status
+	ToStatus   Status
+	Reason     string
+}
