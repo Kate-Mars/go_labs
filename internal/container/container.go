@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/Kate-Mars/go_labs/internal/infra/telemetry"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Kate-Mars/go_labs/internal/config"
@@ -15,6 +14,7 @@ import (
 	geth "github.com/Kate-Mars/go_labs/internal/http/trip/get"
 	"github.com/Kate-Mars/go_labs/internal/infra/postgres"
 	"github.com/Kate-Mars/go_labs/internal/infra/postgres/transaction"
+	"github.com/Kate-Mars/go_labs/internal/infra/telemetry"
 	idemrepo "github.com/Kate-Mars/go_labs/internal/repository/idempotency"
 	triprepo "github.com/Kate-Mars/go_labs/internal/repository/trip"
 	createuc "github.com/Kate-Mars/go_labs/internal/usecase/trip/create"

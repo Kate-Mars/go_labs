@@ -48,17 +48,21 @@ func (m *Metrics) Middleware() func(http.Handler) http.Handler {
 			start := time.Now()
 			ctx := r.Context()
 
-			attrs := []attribute.KeyValue{
+			attrs := make([]attribute.KeyValue, 0, 3)
+			attrs = append(attrs,
 				attribute.String("http.request.method", r.Method),
 				attribute.String("http.route", r.Pattern),
-			}
+			)
+
 			m.activeRequests.Add(ctx, 1, metric.WithAttributes(attrs...))
 			defer m.activeRequests.Add(ctx, -1, metric.WithAttributes(attrs...))
 
 			ww := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(ww, r)
 
-			attrs = append(attrs, attribute.String("http.response.status_code", strconv.Itoa(ww.status)))
+			attrs = append(attrs,
+				attribute.String("http.response.status_code", strconv.Itoa(ww.status)),
+			)
 			m.requestDuration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(attrs...))
 		})
 	}

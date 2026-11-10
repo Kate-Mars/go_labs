@@ -10,12 +10,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"go.uber.org/mock/gomock"
 
 	"github.com/Kate-Mars/go_labs/internal/domain/trip"
-	api "github.com/Kate-Mars/go_labs/internal/generated"
 	"github.com/Kate-Mars/go_labs/internal/http/trip/finish"
 	model "github.com/Kate-Mars/go_labs/internal/model/trip"
 )
@@ -33,13 +33,14 @@ func TestHandler_Finish_200(t *testing.T) {
 	mockUC := NewMockusecase(ctrl)
 
 	tripID := uuid.New()
+	now := time.Now().UTC()
 	mockUC.EXPECT().
 		Do(gomock.Any(), tripID).
 		Return(model.Trip{
 			ID:         tripID,
 			Status:     model.StatusCompleted,
 			Price:      100,
-			FinishedAt: nil,
+			FinishedAt: &now,
 		}, nil)
 
 	h := finish.NewHandler(newLogger(), mockUC)
@@ -47,7 +48,7 @@ func TestHandler_Finish_200(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips/"+tripID.String()+"/finish", nil)
 	rec := httptest.NewRecorder()
 
-	h.Finish(rec, req, api.TripId(tripID))
+	h.Finish(rec, req, tripID)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200, body = %s", rec.Code, rec.Body.String())
@@ -73,7 +74,7 @@ func TestHandler_Finish_NotFound(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips/"+tripID.String()+"/finish", nil)
 	rec := httptest.NewRecorder()
 
-	h.Finish(rec, req, api.TripId(tripID))
+	h.Finish(rec, req, tripID)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", rec.Code)
@@ -102,7 +103,7 @@ func TestHandler_Finish_AlreadyDone(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips/"+tripID.String()+"/finish", nil)
 	rec := httptest.NewRecorder()
 
-	h.Finish(rec, req, api.TripId(tripID))
+	h.Finish(rec, req, tripID)
 
 	if rec.Code != http.StatusConflict {
 		t.Errorf("status = %d, want 409", rec.Code)
@@ -128,7 +129,7 @@ func TestHandler_Finish_InternalError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips/"+tripID.String()+"/finish", nil)
 	rec := httptest.NewRecorder()
 
-	h.Finish(rec, req, api.TripId(tripID))
+	h.Finish(rec, req, tripID)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want 500", rec.Code)
@@ -170,7 +171,7 @@ func TestHandler_Finish_InternalError_LogsError(t *testing.T) {
 	tripID := uuid.New()
 	mockUC.EXPECT().
 		Do(gomock.Any(), tripID).
-		Return(model.Trip{}, errors.New("boom"))
+		Return(model.Trip{}, errTest)
 
 	logHandler := &countingHandler{}
 	h := finish.NewHandler(slog.New(logHandler), mockUC)
@@ -178,7 +179,7 @@ func TestHandler_Finish_InternalError_LogsError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips/"+tripID.String()+"/finish", nil)
 	rec := httptest.NewRecorder()
 
-	h.Finish(rec, req, api.TripId(tripID))
+	h.Finish(rec, req, tripID)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want 500", rec.Code)

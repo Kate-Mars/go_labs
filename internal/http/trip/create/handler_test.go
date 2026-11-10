@@ -22,6 +22,14 @@ import (
 	uc "github.com/Kate-Mars/go_labs/internal/usecase/trip/create"
 )
 
+const testBody = `{
+	"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c",
+	"driver_id":"8860b315-ec86-42eb-a17c-7c163d721ff5",
+	"start_point":{"latitude":59.9,"longitude":30.3},
+	"end_point":{"latitude":59.9,"longitude":30.4},
+	"price":100
+}`
+
 func newLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
@@ -45,14 +53,7 @@ func TestHandler_Create_201(t *testing.T) {
 
 	h := create.NewHandler(newLogger(), mockUC)
 
-	body := `{
-		"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c",
-		"driver_id":"8860b315-ec86-42eb-a17c-7c163d721ff5",
-		"start_point":{"latitude":59.9,"longitude":30.3},
-		"end_point":{"latitude":59.9,"longitude":30.4},
-		"price":100
-	}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips", strings.NewReader(testBody))
 	rec := httptest.NewRecorder()
 
 	h.Create(rec, req, api.CreateTripParams{})
@@ -77,14 +78,7 @@ func TestHandler_Create_DriverBusy(t *testing.T) {
 
 	h := create.NewHandler(newLogger(), mockUC)
 
-	body := `{
-		"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c",
-		"driver_id":"8860b315-ec86-42eb-a17c-7c163d721ff5",
-		"start_point":{"latitude":59.9,"longitude":30.3},
-		"end_point":{"latitude":59.9,"longitude":30.4},
-		"price":100
-	}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips", strings.NewReader(testBody))
 	rec := httptest.NewRecorder()
 
 	h.Create(rec, req, api.CreateTripParams{})
@@ -119,7 +113,6 @@ func TestHandler_Create_InvalidJSON(t *testing.T) {
 	}
 }
 
-// на всякий случай: ошибка usecase → 500
 func TestHandler_Create_InternalError(t *testing.T) {
 	t.Parallel()
 
@@ -132,14 +125,7 @@ func TestHandler_Create_InternalError(t *testing.T) {
 
 	h := create.NewHandler(newLogger(), mockUC)
 
-	body := `{
-		"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c",
-		"driver_id":"8860b315-ec86-42eb-a17c-7c163d721ff5",
-		"start_point":{"latitude":59.9,"longitude":30.3},
-		"end_point":{"latitude":59.9,"longitude":30.4},
-		"price":100
-	}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips", strings.NewReader(testBody))
 	rec := httptest.NewRecorder()
 
 	h.Create(rec, req, api.CreateTripParams{})
@@ -147,7 +133,6 @@ func TestHandler_Create_InternalError(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want 500", rec.Code)
 	}
-	// НЕ должно быть деталей ошибки в теле
 	if strings.Contains(rec.Body.String(), "boom") {
 		t.Errorf("body leaks internal error details: %s", rec.Body.String())
 	}
@@ -178,7 +163,6 @@ func (h *countingHandler) count() int {
 	return h.errors
 }
 
-// TestHandler_Create_WithIdempotencyKey — ключ из params передаётся в usecase.
 func TestHandler_Create_WithIdempotencyKey(t *testing.T) {
 	t.Parallel()
 
@@ -203,14 +187,7 @@ func TestHandler_Create_WithIdempotencyKey(t *testing.T) {
 
 	h := create.NewHandler(newLogger(), mockUC)
 
-	body := `{
-		"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c",
-		"driver_id":"8860b315-ec86-42eb-a17c-7c163d721ff5",
-		"start_point":{"latitude":59.9,"longitude":30.3},
-		"end_point":{"latitude":59.9,"longitude":30.4},
-		"price":100
-	}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips", strings.NewReader(testBody))
 	rec := httptest.NewRecorder()
 
 	h.Create(rec, req, api.CreateTripParams{IdempotencyKey: &key})
@@ -234,14 +211,7 @@ func TestHandler_Create_InternalError_LogsError(t *testing.T) {
 	logHandler := &countingHandler{}
 	h := create.NewHandler(slog.New(logHandler), mockUC)
 
-	body := `{
-		"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c",
-		"driver_id":"8860b315-ec86-42eb-a17c-7c163d721ff5",
-		"start_point":{"latitude":59.9,"longitude":30.3},
-		"end_point":{"latitude":59.9,"longitude":30.4},
-		"price":100
-	}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips", strings.NewReader(testBody))
 	rec := httptest.NewRecorder()
 
 	h.Create(rec, req, api.CreateTripParams{})

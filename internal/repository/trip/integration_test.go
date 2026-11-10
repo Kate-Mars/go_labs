@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Kate-Mars/go_labs/internal/infra/postgres/transaction"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Kate-Mars/go_labs/internal/domain/trip"
+	"github.com/Kate-Mars/go_labs/internal/infra/postgres/transaction"
 	model "github.com/Kate-Mars/go_labs/internal/model/trip"
 	repo "github.com/Kate-Mars/go_labs/internal/repository/trip"
 )
