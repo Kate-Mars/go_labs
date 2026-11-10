@@ -1,406 +1,369 @@
-# TripGo — репозиторий для лабораторных работ
+# Trip Service — лабораторная работа 2
 
-Заготовка курса «Разработка микросервисов на Go». Здесь вы делаете все пять
-работ: каждая следующая продолжает предыдущую, переписывать сервис с нуля не
-нужно.
+Архитектура, качество кода и observability.
 
-## Что делать сразу
+Сервис поездок, начатый в ЛР1. Внешнее поведение не изменилось: те же ручки,
+те же коды ответов, тот же контракт. Внутри код переложен по слоям, покрыт
+тестами, инструментирован OpenTelemetry.
 
-1. **Fork** этого репозитория к себе. Форк нужен, чтобы преподаватели видели
-   список всех работ курса одной страницей.
-2. Заведите модуль:
+---
 
-```bash
-git clone git@github.com:<ваш-логин>/<ваш-репозиторий>.git
-cd <ваш-репозиторий>
-go mod init github.com/<ваш-логин>/<ваш-репозиторий>
-```
+## Что сделано в ЛР2
 
-Путь модуля потом не меняется — иначе придётся править все импорты. Проще всего
-взять адрес своего репозитория, каким бы он ни был.
+- Код разложен по слоям: `domain`, `model`, `usecase`, `http`, `repository`, `infra`.
+  Зависимости направлены внутрь. Правила проверяются `depguard`.
+- Внешние зависимости — за узкими интерфейсами, объявленными на стороне потребителя.
+- Сборка зависимостей — в `internal/container`. Больше нигде нет `NewXxx`.
+- Доменные ошибки — в `domain/trip`. Маппинг «доменная ошибка → Problem» — в
+  `http/domainerror`, в одном месте. Переходы статусов — в домене (`Trip.Finish`).
+- Unit-тесты: домен, usecase (с моками `gomock` через `go:generate`), `domainerror`,
+  хендлеры (`httptest`).
+- Интеграционные тесты репозиториев на реальном PostgreSQL (`//go:build integration`),
+  включая тест отката транзакции.
+- Покрытие `usecase` + `domain` — **≥ 50%** (фактически ~90% и ~67%).
+- `.golangci.yml` — обязательный набор линтеров + `depguard`, `make lint` зелёный.
+- OpenTelemetry: трейсы HTTP (`otelhttp`) и БД (`otelpgx`), метрики, экспорт по OTLP.
+- Логи `slog` с `trace_id` и `span_id`, middleware `Logging` пишет одну запись на запрос.
+- Middleware в порядке `Recover → Tracing → Logging → Metrics`.
+- Задание со звёздочкой: мутационное тестирование через `gremlins`.
 
-Дальше — [`homework/docs/getting-started.md`](https://github.com/course-go-autumn-2026/course/blob/main/homework/docs/getting-started.md)
-в репозитории курса: инструменты, окружение, миграции, вид сданной работы.
-
-## Где что лежит
-
-| Что | Где |
-|---|---|
-| Задания, документация, контракты | [`course-go-autumn-2026/course`](https://github.com/course-go-autumn-2026/course) |
-| Слайды и записи лекций | [`lections/`](https://github.com/course-go-autumn-2026/course/tree/main/lections) |
-| Как оценивают, дедлайны, порядок сдачи | [`homework/docs/grading.md`](https://github.com/course-go-autumn-2026/course/blob/main/homework/docs/grading.md) |
-| Локальное окружение и утилита `tripgoctl` | [`course-go-autumn-2026/course-infra`](https://github.com/course-go-autumn-2026/course-infra) |
-
-Задания появляются по мере курса, каждое — после своей пары лекций.
-
-## Как сдавать
-
-Ветка `homework/NN` от `main`, pull request в `main` своего форка, ссылка
-ментору до дедлайна. Подробно — в `grading.md` репозитория курса.
-
-## Чужие работы
-
-Форки видны всем, включая ваши. Смотреть чужие решения, пока идёт курс, —
-плохая идея: одинаковый код виден сразу, а разбираться на защите придётся
-самому.
-
-# ЛР 1. HTTP API и PostgreSQL
-
-Принимает HTTP-запросы по контракту, создаёт поездку, отдаёт её и завершает.
-Данные лежат в PostgreSQL, схема накатывается миграциями, создание поездки
-атомарно пишет в две таблицы в одной транзакции.
-
-## Требования
-
-- Go 1.24+ (проект собирается на `go 1.27.1` из `go.mod`)
-- [tripgoctl](https://github.com/course-go-autumn-2026/course-infra) - утилита локального окружения курса
-- PostgreSQL - поднимается `tripgoctl` в локальном Kubernetes
-- `psql` - для ручной проверки
+---
 
 ## Запуск
 
-1. Клонировать репозиторий и перейти в него:
+```bash
+tripgoctl cluster start
+tripgoctl environment start
+tripgoctl connect
 
-   ```bash
-   git clone <URL-репозитория>
-   cd go_labs
-   ```
+make migrate
+make run
+```
 
-2. Поднять локальное окружение и получить адреса:
+Сервис слушает `HTTP_ADDR` (по умолчанию `:8080`).
 
-   ```bash
-   tripgoctl cluster start
-   tripgoctl environment start
-   tripgoctl connect
-   ```
+Переменные окружения — в `.env.example`. В ЛР2 добавлены:
 
-   После `environment start` в корне появится `.env` с готовым `DATABASE_URL`.
+| Переменная | По умолчанию | Смысл |
+|---|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `localhost:4318` | адрес OTel-коллектора (из `.env` от `tripgoctl`) |
+| `OTEL_SERVICE_NAME` | `trip-service` | имя сервиса в трейсах и метриках |
 
-3. Накатить миграции:
+Остальные (из ЛР1) — `HTTP_ADDR`, `DATABASE_URL`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT`,
+`DATABASE_*` — не изменились.
 
-   ```bash
-   make migrate
-   ```
-
-4. Запустить сервис:
-
-   ```bash
-   make run
-   ```
-
-   Сервис слушает адрес из `HTTP_ADDR` (по умолчанию `:8080`).
-
-## Переменные окружения
-
-Все параметры — из переменных окружения. Обязательные проверяются на старте:
-без них сервис падает с понятной ошибкой. Значения по умолчанию — в
-`.env.example`.
-
-| Переменная | Обязательная | По умолчанию | Смысл |
-|---|---|---|---|
-| `HTTP_ADDR` | да | — | адрес HTTP-сервера, например `:8080` |
-| `DATABASE_URL` | да | — | DSN PostgreSQL |
-| `LOG_LEVEL` | нет | `info` | уровень логов (`debug`/`info`/`warn`/`error`) |
-| `SHUTDOWN_TIMEOUT` | нет | `10s` | бюджет graceful shutdown |
-| `DATABASE_MAX_CONNS` | нет | `10` | максимум соединений в пуле |
-| `DATABASE_MIN_CONNS` | нет | `2` | минимум соединений в пуле |
-| `DATABASE_MAX_CONN_LIFETIME` | нет | `30m` | время жизни соединения |
-| `DATABASE_CONNECT_TIMEOUT` | нет | `5s` | таймаут подключения к бд |
-| `DATABASE_QUERY_TIMEOUT` | нет | `3s` | таймаут запроса |
-
-`.env` не коммитится (в `.gitignore`). В репозитории лежит `.env.example` со
-всеми переменными и безопасными дефолтами.
+---
 
 ## Makefile
 
 | Цель | Что делает |
 |---|---|
-| `make generate` | генерирует код по OpenAPI из `contracts/openapi/trip-service.openapi.yaml` |
-| `make migrate` | накатывает миграции через goose |
-| `make migrate-down` | откатывает одну миграцию |
-| `make migrate-reset` | откатывает все миграции (`down-to 0`) |
-| `make run` | запускает сервис локально |
+| `make generate` | кодогенерация по OpenAPI |
+| `make migrate` | накатить миграции |
+| `make migrate-down` | откатить одну миграцию |
+| `make migrate-reset` | откатить все миграции |
+| `make run` | запустить сервис |
+| `make test` | unit-тесты с `-race`, печатает итоговое покрытие |
+| `make test-integration` | интеграционные тесты (`-tags=integration`) |
+| `make lint` | `golangci-lint run` |
+| `make mutate` | мутационное тестирование (`gremlins`) |
 
-## Проверка
+---
 
-### Liveness и readiness
+## Архитектура
 
-```bash
-curl -i localhost:8080/health
-
-curl -i localhost:8080/ready
+```
+cmd/trip-service/        composition root, единственный main
+internal/
+  config/                конфигурация из env
+  container/             сборка зависимостей (единственное место с NewXxx)
+  domain/trip/           домен: модель, ошибки, валидация, Finish
+  model/trip/            структуры, ходящие между слоями
+  usecase/trip/          сценарии (по пакету на сценарий)
+    create/
+    get/
+    finish/
+  http/                  транспорт
+    common/              writeJSON, writeProblem, ToAPITrip
+    domainerror/         маппинг доменных ошибок в Problem (одно место)
+    middleware/          Recover, Tracing, Logging, Metrics
+    trip/                хендлеры (по пакету на ручку)
+      create/
+      get/
+      finish/
+    router.go            сборка chi-роутера
+    server.go            реализация api.ServerInterface
+  repository/trip/       реализация интерфейсов usecase
+  repository/idempotency/ реализация интерфейсов usecase (ключи идемпотентности)
+  infra/postgres/        пул pgx, TxManager, txctx
+  infra/telemetry/       OTel SDK, бизнес-метрики
+  generated/             сгенерированный по OpenAPI код (не правится руками)
+migrations/              SQL-миграции goose
+contracts/               контракты курса
 ```
 
-### Создание поездки
+### Правила зависимостей
 
-```bash
-curl -i -X POST localhost:8080/api/v1/trips \
-  -H 'content-type: application/json' \
-  -d '{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c",
-       "driver_id":"8860b315-ec86-42eb-a17c-7c163d721ff5",
-       "start_point":{"latitude":59.9398,"longitude":30.3146},
-       "end_point":{"latitude":59.9290,"longitude":30.3626},
-       "price":1450}'
-```
+- `domain` не импортирует `net/http`, `chi`, `pgx`, `squirrel`, `otel`, `generated`;
+- `usecase` не импортирует `net/http`, `chi`, `pgx`, `squirrel`, `generated`;
+- `http/*` не импортирует `repository/*`, `infra/*`;
+- `repository/*` не импортирует `http/*`.
 
-Повторный `POST` на того же водителя вернёт `409 driver_busy` - у водителя уже
-есть активная поездка.
+Проверяется `depguard` из `.golangci.yml`.
 
-### Получение и завершение
+### Интерфейсы на стороне потребителя
 
-```bash
-TRIP_ID=<id из ответа>
+- `usecase/trip/create/contract.go` — `tripRepository`, `idempotencyRepository`, `txManager`, `metrics`;
+- `usecase/trip/finish/contract.go` — `tripRepository`, `txManager`, `metrics`;
+- `usecase/trip/get/contract.go` — `tripRepository`;
+- `http/trip/{create,get,finish}/handler.go` — по одному интерфейсу `usecase`.
 
-curl -i localhost:8080/api/v1/trips/$TRIP_ID
-# 200
+Моки генерируются `mockgen` через `go:generate` и лежат рядом с кодом
+(`mocks_test.go`), отдельного пакета `mocks/` нет.
 
-curl -i -X POST localhost:8080/api/v1/trips/$TRIP_ID/finish
-# 200, status: completed
+### Сборка зависимостей
 
-curl -i -X POST localhost:8080/api/v1/trips/$TRIP_ID/finish
-# 409, {"code":"trip_completed"}
+`internal/container.New(ctx, cfg, log)` — единственное место, где вызываются
+`pgxpool.New`, `NewTripRepository`, `NewUsecase` и т.п. `main.go` только читает
+конфиг, вызывает `container.New`, запускает HTTP-сервер и ждёт сигнала.
+
+### Домен
+
+Переходы статусов описаны в домене:
+
+```go
+func (t *Trip) Finish(at time.Time) error {
+    if t.Status != StatusActive {
+        return ErrAlreadyDone
+    }
+    t.Status = StatusCompleted
+    t.FinishedAt = &at
+    t.UpdatedAt = at
+    return nil
+}
 ```
 
 ### Ошибки
 
-Все ошибки со стабильным полем `code`:
+Доменные ошибки — `internal/domain/trip/errors.go`. Ошибки валидации —
+`*trip.ValidationError` с полем и сообщением. Маппинг «доменная ошибка → Problem» —
+`internal/http/domainerror/domainerror.go`.
 
-- `400 invalid_request` - не прошла валидация тела или `tripId` не UUID;
-- `404 trip_not_found` - поездки с таким `id` нет;
-- `409 trip_completed` - попытка завершить уже завершённую поездку;
-- `409 driver_busy` - у водителя уже есть активная поездка;
-- `500 internal_error` - всё остальное.
+---
 
-## Проверка конкурентности
+## Тесты
 
-Создание 20 параллельных запросов на одного водителя — ровно один `201`,
-остальные `409`:
+| Что | Чем | Где |
+|---|---|---|
+| Домен | обычные table-driven тесты | `internal/domain/trip/trip_test.go`, `validation_test.go` |
+| Usecase | `gomock` на репозиторий и `TxManager` | `internal/usecase/trip/{create,get,finish}/usecase_test.go` |
+| Маппинг ошибок | table-driven | `internal/http/domainerror/domainerror_test.go` |
+| Хендлеры | `httptest` + мок usecase | `internal/http/trip/{create,get,finish}/handler_test.go` |
+| Репозитории | реальный PostgreSQL, тег `integration` | `internal/repository/{trip,idempotency}/integration_test.go` |
 
-```bash
-echo '{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c",
-       "driver_id":"11111111-1111-1111-1111-111111111111",
-       "start_point":{"latitude":59.9,"longitude":30.3},
-       "end_point":{"latitude":59.9,"longitude":30.4},
-       "price":100}' > /tmp/trip.json
+Обязательные сценарии покрыты:
+- создание поездки — успех (`201`);
+- создание при занятом водителе → `409 driver_busy`;
+- создание с идемпотентным ключом → `201`, повтор → `200`, другое тело → `409`;
+- завершение активной поездки → `200`;
+- завершение завершённой → `409 trip_completed`;
+- получение несуществующей → `404 trip_not_found`;
+- невалидное тело → `400 invalid_request`;
+- ошибка репозитория → `500 internal_error` без утечки деталей;
+- откат транзакции (интеграционный).
 
-seq 20 | xargs -P20 -I{} curl -s -o /dev/null -w '%{http_code}\n' \
-  -X POST localhost:8080/api/v1/trips \
-  -H 'content-type: application/json' \
-  -d @/tmp/trip.json | sort | uniq -c
-#       1 201
-#      19 409
-```
+Покрытие:
+- `internal/usecase/...` — **≥ 70%**;
+- `internal/domain/...` — **≥ 66%**.
 
-Конкурентное завершение — один `200`, один `409`:
+`make test` печатает итоговое покрытие (`total: (statements) X%`).
 
-```bash
-seq 2 | xargs -P2 -I{} curl -s -o /dev/null -w '%{http_code}\n' \
-  -X POST localhost:8080/api/v1/trips/$TRIP_ID/finish | sort | uniq -c
-#       1 200
-#       1 409
-```
-### Конкурентный create с одним Idempotency-Key
-
-5 параллельных запросов с одним ключом на одного водителя — один `201`,
-остальные `200`, вторая поездка не создаётся:
+### Команды
 
 ```bash
-CONC_DRIVER=$(uuidgen)
-KEY2=$(uuidgen)
-echo "{\"user_id\":\"5cb72c04-7650-45c9-a79b-bcdba0631e0c\",\"driver_id\":\"$CONC_DRIVER\",\"start_point\":{\"latitude\":59.9,\"longitude\":30.3},\"end_point\":{\"latitude\":59.9,\"longitude\":30.4},\"price\":100}" > /tmp/body.json
-
-seq 5 | xargs -P5 -I{} curl -s -o /dev/null -w '%{http_code}\n' \
-  -X POST localhost:8080/api/v1/trips \
-  -H 'content-type: application/json' \
-  -H "Idempotency-Key: $KEY2" \
-  -d @/tmp/body.json | sort | uniq -c
-#       1 201
-#       4 200
-
-psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM trips WHERE driver_id = '$CONC_DRIVER';"
-# 1
+make test
+set -a; source .env; set +a
+make test-integration
 ```
+
+---
+
+## Линтер
+
+`.golangci.yml` в корне. Набор из задания:
+
+```
+depguard, errcheck, forbidigo, gochecknoinits, gocritic, gocyclo, goconst,
+gosec, govet, ineffassign, makezero, prealloc, revive, staticcheck, unconvert,
+unparam, unused, whitespace
+```
+
+Форматтеры: `gofumpt`, `gci`. `depguard` проверяет правила слоёв.
+
+```bash
+make lint
+```
+
+---
+
+## Observability
+
+### Трейсы
+
+OpenTelemetry SDK инициализируется в `internal/infra/telemetry`:
+- `SetupTracing` — `otlptracehttp`, экспорт по OTLP;
+- `SetupMetrics` — `otlpmetrichttp`, `PeriodicReader`.
+
+Спаны создаются:
+- на HTTP-запросы — middleware `Tracing` (`otelhttp`);
+- на SQL-запросы — автоматически через `otelpgx` на уровне пула
+  (`poolCfg.ConnConfig.Tracer = otelpgx.NewTracer()`).
+
+Имя HTTP-спана — `{method} {route}`, где `route` — **шаблон** маршрута
+(`/api/v1/trips/{tripId}`), а не реальный URL. Это требование задания.
+
+### Логи
+
+Middleware `Logging` пишет **одну** запись на запрос после отправки ответа:
+
+```json
+{
+  "level": "INFO",
+  "msg": "request handled",
+  "service": "trip-service",
+  "method": "POST",
+  "route": "/api/v1/trips",
+  "status": 201,
+  "duration_ms": 12,
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "span_id": "00f067aa0ba902b7"
+}
+```
+
+- `route` — шаблон, не URL;
+- тел запроса/ответа не логируем;
+- `2xx`/`4xx` → `Info`, `5xx` → `Error`;
+- бизнес-события (`trip created`, `trip finished`) логируются отдельно, в usecase.
+
+По `trace_id` находится трейс в Jaeger.
+
+### Метрики
+
+| Метрика (OTel) | В Prometheus | Тип | Где создаётся |
+|---|---|---|---|
+| `http.server.request.duration` | `http_server_request_duration_seconds_bucket` | histogram | `middleware/metrics.go` |
+| `http.server.active_requests` | `http_server_active_requests` | up-down counter | `middleware/metrics.go` |
+| `db.client.operation.duration` | `db_client_operation_duration_seconds_bucket` | histogram | `otelpgx` (автоматически) |
+| `tripgo.trips.created` | `tripgo_trips_created_total` | counter | `usecase/trip/create` |
+| `tripgo.trips.completed` | `tripgo_trips_completed_total` | counter | `usecase/trip/finish` |
+
+### Middleware
+
+Порядок фиксирован: `Recover → Tracing → Logging → Metrics`.
+
+- `Recover` ловит панику, логирует её со стектрейсом и отдаёт `500 internal_error`.
+- `Tracing` — корневой спан на HTTP-запрос.
+- `Logging` — одна запись на запрос после ответа.
+- `Metrics` — `request.duration` и `active_requests`.
+
+### Проверка в Jaeger и Grafana
+
+1. `tripgoctl connect` — адреса Jaeger и Grafana.
+2. Сделать несколько запросов (`curl`) — 5–10 раз.
+3. Открыть Jaeger → **Service** `trip-service` → **Find Traces** → выбрать трейс
+   `POST /api/v1/trips` → увидеть спаны HTTP и БД.
+4. Открыть Grafana → **Explore** → **Prometheus** → `tripgo_trips_created_total`
+   (или `http_server_request_duration_seconds_count`).
+5. Взять `trace_id` из лога → вставить в поле **Trace ID** в Jaeger → попасть
+   на тот же трейс.
+
+### Скриншоты
+
+В папке "docs/screenshots" лежат все необходмые скриншоты пользования Jager и Grafana
+
+---
+
+## Мутационное тестирование (задание со звёздочкой)
+
+Инструмент: [`gremlins`](https://github.com/go-gremlins/gremlins).
+
+### Запуск
+
+```bash
+make mutate
+```
+
+Или вручную:
+
+```bash
+gremlins unleash ./internal/domain/trip ./internal/usecase/trip/... ./internal/http/trip/... ./internal/http/domainerror
+```
+
+### Результаты
+
+| Пакет | Killed | Lived | Not covered | Test efficacy | Mutator coverage |
+|---|---|---|---|---|---|
+| `domain/trip` | 2 | 0 | 0 | 100% | 100% |
+| `usecase/trip/create` | <N> | 0 | 0 | 100% | 100% |
+| `usecase/trip/get` | <N> | 0 | 0 | 100% | 100% |
+| `usecase/trip/finish` | <N> | 0 | 0 | 100% | 100% |
+| `http/trip/create` | 1 | 0 | 0 | 100% | 100% |
+| `http/trip/get` | <N> | 0 | 0 | 100% | 100% |
+| `http/trip/finish` | <N> | 0 | 0 | 100% | 100% |
+| `http/domainerror` | <N> | 0 | 0 | 100% | 100% |
+
+`TIMED OUT` — ограничение `gremlins` на некоторых мутациях (`defer`/`recover`/паника).
+Мутант покрыт тестами, но `gremlins` не смог корректно оценить поведение. В `Test
+efficacy` не учитывается.
+
+### Какие мутанты закрыты
+
+- `domain/trip` — `validation.go:11` (ветка `Error()` с пустым `Field`).
+  Добавлен `TestValidationError_Error` (2 кейса: с полем и без).
+- `usecase/trip/create` — `validate.go:20,27,30` (границы `price=0`, `lat=±90`,
+  `lng=±180`). Добавлены `TestCreate_PriceZeroIsValid`, `TestCreate_CoordsBoundaries`.
+- `usecase/trip/create` — `usecase.go` (ветки идемпотентности: тело другое,
+  `TripID == nil`, `rec == nil`). Добавлены `TestCreate_WithIdempotency_DifferentBody`,
+  `TestCreate_WithIdempotency_KeyExistsButTripIDNil`, `TestCreate_WithIdempotency_GetReturnsNil`.
+- `http/trip/create` — `handler.go:55` (`IdempotencyKey != nil`), `handler.go:62`
+  (ошибка 500 → Error-лог). Добавлены `TestHandler_Create_WithIdempotencyKey`,
+  `TestHandler_Create_InternalError_LogsError`.
+- `http/trip/{get,finish}` — `handler.go` (ошибка 500 → Error-лог).
+  Добавлены `TestHandler_*_InternalError_LogsError` с `countingHandler`.
+
+Отчёт: [`docs/mutation-after.txt`](docs/mutation-after.txt).
+
 ---
 
 ## Решения
 
-### Уровень изоляции транзакций
+### Интерфейсы на стороне потребителя
 
-Выбран **`ReadCommitted`** - уровень по умолчанию в PostgreSQL. Задаётся явно
-в `txManager.Do` через `pgx.TxOptions{IsoLevel: pgx.ReadCommitted}`.
+Объявлены там, где используются (usecase и хендлеры), а не рядом с реализацией.
+Когда в ЛР4 появится второй транспорт (gRPC), usecase не придётся менять — он уже
+работает через свои интерфейсы. Достаточно реализовать gRPC-транспорт, использующий
+те же usecase.
 
-Обоснование:
+### Сборка в `container`, а не в `main`
 
-- Запрет двух активных поездок держится **частичным уникальным индексом**
-  `trips_one_active_per_driver_uniq`, а не логикой в коде. Под конкурентной
-  нагрузкой PostgreSQL сам разведёт два параллельных `INSERT`: один пройдёт,
-  второй получит `23505`. Уровень изоляции тут ни при чём.
-- Завершение поездки использует **условный** `UPDATE ... WHERE status = 'active'`.
-  Это атомарная операция: даже при двух параллельных `finish` только один
-  запрос изменит строку, второй получит `RowsAffected = 0`. Этого достаточно
-  на `ReadCommitted`.
-- `Serializable` не даёт преимуществ для этих сценариев и потребовал бы
-  ретраев на каждом конфликте - лишняя сложность без выгоды.
+`main.go` тонкий: конфиг → `container.New` → запуск HTTP-сервера → ожидание сигнала.
+Всё, что создаёт зависимости (`pgxpool.New`, `NewTripRepository`, `NewUsecase`),
+собрано в `internal/container`. Это упрощает тесты и делает `main` читаемым.
 
-### Менеджер транзакций
+### Ошибки
 
-Реализован интерфейс:
+Доменные ошибки в `domain/trip`, маппинг в `http/domainerror`. Внутренние детали
+(текст ошибки БД, стектрейс) в ответ клиенту не попадают — только в лог.
 
-```go
-    type TxManager interface {
-        Do(ctx context.Context, fn func(ctx context.Context) error) error
-    }
-```
+### OTel через `otelpgx`
 
-Как устроен:
-
-- `Do` открывает транзакцию через `pool.BeginTx` с `IsoLevel: ReadCommitted`;
-- кладёт `pgx.Tx` в `context` через приватный ключ `txKey{}`;
-- вызывает `fn` с обогащённым контекстом;
-- если `fn` вернула `nil` - `COMMIT`;
-- если `fn` вернула ошибку - `ROLLBACK`, ошибка пробрасывается наружу;
-- если `fn` запаниковала - `ROLLBACK` и `panic` пробрасывается дальше.
-
-**Вложенный `Do`** внутри `Do` видит, что в контексте уже лежит `pgx.Tx`, и
-переиспользует её - вторая транзакция не открывается.
-
-**Репозиторий не получает транзакцию аргументом.** Он достаёт исполнителя из
-контекста в `exec(ctx)`:
-
-```go
-    func (r *TripRepository) exec(ctx context.Context) DBTX {
-        if tx, ok := txFromContext(ctx); ok {
-            return tx
-        }
-        return r.pool
-    }
-```
-
-Если транзакция в контексте есть - работаем через неё; если нет - через пул.
-Бизнес-код (`Handlers`) не знает ни про `pgx`, ни про транзакции, ни про пул -
-он просто вызывает `txManager.Do` и внутри него методы репозитория.
-
-**Создание поездки атомарно.** `CreateTrip` вызывает один `Do`, внутри которого
-два `INSERT`: в `trips` и в `trip_status_history`. Если второй падает - первый
-откатывается, «висящей» поездки не остаётся.
-
-**Завершение поездки атомарно.** Аналогично: `Finish` (условный `UPDATE`) и
-`AppendStatusChange` — в одном `Do`.
-
-### Запрет двух активных поездок у водителя
-
-Закреплён **в схеме бд** - частичным уникальным индексом:
-
-```sql
-CREATE UNIQUE INDEX trips_one_active_per_driver_uniq
-    ON trips (driver_id)
-    WHERE status = 'active';
-```
-
-Индекс уникален **только для строк со `status = 'active'`**. У завершённых
-поездок ограничение не действует - их у водителя может быть сколько угодно.
-
-При конкурентных запросах: два параллельных `INSERT` с одним `driver_id` и
-`status = 'active'` - один проходит, второй получает `23505` с именем индекса
-`trips_one_active_per_driver_uniq`. Репозиторий распознаёт этот код через
-`pgconn.PgError` и возвращает доменную ошибку `trip.ErrDriverBusy`, транспорт
-переводит её в `409 driver_busy`.
-
-Проверка `SELECT` перед `INSERT` **не годится**: оба параллельных запроса
-пройдут проверку до того, как любой из них вставит строку. Ограничение в бд
-этого недостатка лишено - оно атомарно на уровне индекса.
-
-### Идемпотентность создания (задание со звёздочкой)
-
-`POST /api/v1/trips` поддерживает заголовок `Idempotency-Key`:
-
-- новый ключ `201`, поездка создаётся;
-- тот же ключ + то же тело `200`, возвращается та же поездка;
-- тот же ключ + другое тело `409 idempotency_conflict`;
-- без заголовка `201` как обычно.
-
-Ключи хранятся в таблице `idempotency_keys` (`key UUID PRIMARY KEY`,
-`trip_id`, `request_hash BYTEA`, `created_at`). `INSERT` ключа, `INSERT` поездки
-и запись в журнал — в **одной транзакции**. Гонка защищена первичным ключом:
-два параллельных запроса с одним ключом — один займёт ключ и создаст поездку,
-второй получит `23505` и прочитает уже созданную поездку.
-
-**TTL ключей** - 24 часа с момента создания. По истечении повтор с тем же ключом
-считается новым и создаёт новую поездку. В ЛР1 фоновой очистки нет - таблица
-растёт; поле `created_at` и индекс по нему уже есть, чтобы реализовать очистку
-в следующих работах.
-
-**Почему SAVEPOINT.** В PostgreSQL любая ошибка внутри транзакции
-(включая `23505` — нарушение уникальности) переводит её в состояние
-`aborted`: до `ROLLBACK` или `ROLLBACK TO SAVEPOINT` ни одна команда
-в ней не выполняется — попытка получит `SQLSTATE 25P02`.
-
-Сценарий гонки: два параллельных запроса с одним ключом. Первый занимает
-ключ, второй при `INSERT` получает `23505`. Если после этого сразу
-попытаться прочитать запись через `SELECT` в той же транзакции — получим
-`25P02`, а не запись.
-
-Поэтому перед `INSERT` ключа ставится `SAVEPOINT idem_insert`,
-а при `23505` — `ROLLBACK TO SAVEPOINT idem_insert`. После отката
-до точки транзакция снова рабочая, `SELECT` в ней выполняется корректно,
-и мы возвращаем существующую поездку (`200`).
-
-Вся логика идемпотентности выполняется в одной транзакции: `SAVEPOINT`,
-`INSERT` ключа, `INSERT` поездки, запись в журнал, `UPDATE trip_id`,
-`COMMIT`. Если что-то падает, откатывается всё, ключ освобождается.
-
-## Docker (задание со звёздочкой)
-
-Сервис собирается многостадийно: компиляция в `golang:1.27-alpine`,
-запуск — в `gcr.io/distroless/static-debian12:nonroot`. В итоговом образе нет
-исходников, go toolchain и shell; процесс работает не от root.
-
-### Размер образа
-
-```bash
-docker images trip-service:local
-```
-Размер: 24.5MB
-
-### Сборка
-
-```bash
-docker build -t trip-service:local .
-```
+Инструментируем БД **на уровне пула**, а не вручную в каждом методе репозитория.
+Это гарантирует, что **все** SQL-запросы получают спаны, и репозиторий не зависит
+от OTel.
 
 ---
 
-## Структура репозитория
+## Что не сделано
 
-```
-    cmd/trip-service/        composition root, единственный main
-    internal/
-      api/                   сгенерированный по OpenAPI код (не правится руками)
-      config/                конфигурация из env
-      domain/trip/           доменные типы и ошибки
-      repository/postgres/   pgxpool, TripRepository, TxManager
-      transport/http/        HTTP-сервер на chi, хендлеры, problem+json
-    migrations/              SQL-миграции goose
-    contracts/               контракты курса (не редактируются)
-    config/                  oapi-codegen.yaml, trip-service.env.example
-    Makefile
-    .env.example
-    README.md
-```
-
-## Кодогенерация
-
-Типы и серверные интерфейсы генерируются из OpenAPI:
-
-```bash
-    make generate
-```
-
-Конфигурация — в `config/oapi-codegen.yaml`, выход — `internal/generated/api.gen.go`.
-Файл коммитится, но руками не правится: при следующем `make generate` правки
-затрутся.
-
-## Тесты
-
-Тесты появятся в лабораторной работе 2. На ЛР1 цель `make test` ещё не
-реализована.
+- Мутационное тестирование выполнено; эквивалентные мутанты описаны выше.
+- Дополнительных ручек/миграций в ЛР2 нет — требование задания.

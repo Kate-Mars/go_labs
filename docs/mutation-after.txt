@@ -1,0 +1,127 @@
+]1341;command_started;command=6563686f20223d3d3d20696e7465726e616c2f646f6d61696e2f74726970203d3d3d22=== internal/domain/trip ===
+Starting...
+Gathering coverage... done in 646.537891ms
+      KILLED CONDITIONALS_NEGATION at validation.go:11:13
+      KILLED CONDITIONALS_NEGATION at trip.go:40:14
+
+Mutation testing completed in 3 seconds 851 milliseconds
+Killed: 2, Lived: 0, Not covered: 0
+Timed out: 0, Not viable: 0, Skipped: 0
+Test efficacy: 100.00%
+Mutator coverage: 100.00%
+
+=== internal/usecase/trip/create ===
+Starting...
+Gathering coverage... done in 855.74018ms
+   TIMED OUT CONDITIONALS_NEGATION at usecase.go:70:44
+   TIMED OUT CONDITIONALS_NEGATION at usecase.go:55:30
+   TIMED OUT CONDITIONALS_NEGATION at usecase.go:79:9
+   TIMED OUT CONDITIONALS_NEGATION at usecase.go:114:12
+   TIMED OUT CONDITIONALS_NEGATION at usecase.go:117:56
+   TIMED OUT CONDITIONALS_NEGATION at usecase.go:100:10
+   TIMED OUT CONDITIONALS_NEGATION at usecase.go:59:23
+   TIMED OUT CONDITIONALS_NEGATION at usecase.go:107:45
+      KILLED CONDITIONALS_NEGATION at usecase.go:138:10
+      KILLED CONDITIONALS_NEGATION at usecase.go:130:31
+      KILLED CONDITIONALS_NEGATION at usecase.go:144:9
+      KILLED CONDITIONALS_NEGATION at validate.go:14:69
+      KILLED CONDITIONALS_NEGATION at usecase.go:130:10
+      KILLED CONDITIONALS_NEGATION at validate.go:8:15
+      KILLED CONDITIONALS_NEGATION at validate.go:11:17
+      KILLED CONDITIONALS_NEGATION at usecase.go:127:10
+      KILLED CONDITIONALS_NEGATION at validate.go:17:65
+      KILLED CONDITIONALS_BOUNDARY at validate.go:20:14
+      KILLED CONDITIONALS_BOUNDARY at validate.go:27:9
+      KILLED CONDITIONALS_NEGATION at validate.go:27:9
+      KILLED CONDITIONALS_NEGATION at validate.go:20:14
+      KILLED ARITHMETIC_BASE at validate.go:27:11
+      KILLED INVERT_NEGATIVES at validate.go:27:11
+      KILLED CONDITIONALS_BOUNDARY at validate.go:27:22
+      KILLED CONDITIONALS_NEGATION at validate.go:27:22
+      KILLED CONDITIONALS_BOUNDARY at validate.go:30:9
+      KILLED CONDITIONALS_NEGATION at validate.go:30:9
+      KILLED ARITHMETIC_BASE at validate.go:30:11
+      KILLED INVERT_NEGATIVES at validate.go:30:11
+      KILLED CONDITIONALS_BOUNDARY at validate.go:30:23
+      KILLED CONDITIONALS_NEGATION at validate.go:30:23
+
+Mutation testing completed in 12 seconds 76 milliseconds
+Killed: 23, Lived: 0, Not covered: 0
+Timed out: 8, Not viable: 0, Skipped: 0
+Test efficacy: 100.00%
+Mutator coverage: 100.00%
+
+=== internal/usecase/trip/get ===
+Starting...
+Gathering coverage... done in 742.6999ms
+      KILLED CONDITIONALS_NEGATION at usecase.go:21:8
+
+Mutation testing completed in 3 seconds 296 milliseconds
+Killed: 1, Lived: 0, Not covered: 0
+Timed out: 0, Not viable: 0, Skipped: 0
+Test efficacy: 100.00%
+Mutator coverage: 100.00%
+
+=== internal/usecase/trip/finish ===
+Starting...
+Gathering coverage... done in 763.269941ms
+      KILLED CONDITIONALS_NEGATION at usecase.go:24:8
+      KILLED CONDITIONALS_NEGATION at usecase.go:31:50
+      KILLED CONDITIONALS_NEGATION at usecase.go:42:9
+      KILLED CONDITIONALS_NEGATION at usecase.go:47:9
+
+Mutation testing completed in 3 seconds 473 milliseconds
+Killed: 4, Lived: 0, Not covered: 0
+Timed out: 0, Not viable: 0, Skipped: 0
+Test efficacy: 100.00%
+Mutator coverage: 100.00%
+
+=== internal/http/trip/create ===
+Starting...
+Gathering coverage... done in 779.687268ms
+      KILLED ARITHMETIC_BASE at handler.go:74:45
+   TIMED OUT CONDITIONALS_NEGATION at handler.go:60:9
+   TIMED OUT CONDITIONALS_NEGATION at handler.go:55:27
+   TIMED OUT CONDITIONALS_NEGATION at handler.go:62:13
+   TIMED OUT CONDITIONALS_NEGATION at handler.go:35:34
+
+Mutation testing completed in 5 seconds 38 milliseconds
+Killed: 1, Lived: 0, Not covered: 0
+Timed out: 4, Not viable: 0, Skipped: 0
+Test efficacy: 100.00%
+Mutator coverage: 100.00%
+
+=== internal/http/trip/get ===
+Starting...
+Gathering coverage... done in 816.581911ms
+      KILLED CONDITIONALS_NEGATION at handler.go:33:9
+      KILLED CONDITIONALS_NEGATION at handler.go:35:13
+
+Mutation testing completed in 2 seconds 948 milliseconds
+Killed: 2, Lived: 0, Not covered: 0
+Timed out: 0, Not viable: 0, Skipped: 0
+Test efficacy: 100.00%
+Mutator coverage: 100.00%
+
+=== internal/http/trip/finish ===
+Starting...
+Gathering coverage... done in 777.258802ms
+      KILLED CONDITIONALS_NEGATION at handler.go:33:9
+      KILLED CONDITIONALS_NEGATION at handler.go:35:13
+
+Mutation testing completed in 3 seconds 229 milliseconds
+Killed: 2, Lived: 0, Not covered: 0
+Timed out: 0, Not viable: 0, Skipped: 0
+Test efficacy: 100.00%
+Mutator coverage: 100.00%
+
+=== internal/http/domainerror ===
+Starting...
+Gathering coverage... done in 601.161386ms
+      KILLED ARITHMETIC_BASE at domainerror.go:39:46
+
+Mutation testing completed in 3 seconds 350 milliseconds
+Killed: 1, Lived: 0, Not covered: 0
+Timed out: 0, Not viable: 0, Skipped: 0
+Test efficacy: 100.00%
+Mutator coverage: 100.00%
