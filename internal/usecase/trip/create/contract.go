@@ -1,3 +1,4 @@
+//go:generate go tool mockgen -source ${GOFILE} -destination mocks_test.go -package ${GOPACKAGE}_test
 package create
 
 import (
@@ -17,10 +18,8 @@ type tripRepository interface {
 type idempotencyRepository interface {
 	InsertIfAbsent(ctx context.Context, rec model.IdempotencyRecord) (bool, error)
 
-	// Get читает ключ. Возвращает nil, если ключа нет.
 	Get(ctx context.Context, key uuid.UUID) (*model.IdempotencyRecord, error)
 
-	// SetTripID проставляет trip_id после создания поездки.
 	SetTripID(ctx context.Context, key, tripID uuid.UUID) error
 }
 
