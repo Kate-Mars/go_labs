@@ -9,6 +9,10 @@ import (
 	model "github.com/Kate-Mars/go_labs/internal/model/trip"
 )
 
+type metrics interface {
+	IncCreated(ctx context.Context)
+}
+
 type tripRepository interface {
 	Create(ctx context.Context, t model.Trip) error
 	GetByID(ctx context.Context, id uuid.UUID) (model.Trip, error)

@@ -18,6 +18,42 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
+// Mockmetrics is a mock of metrics interface.
+type Mockmetrics struct {
+	ctrl     *gomock.Controller
+	recorder *MockmetricsMockRecorder
+	isgomock struct{}
+}
+
+// MockmetricsMockRecorder is the mock recorder for Mockmetrics.
+type MockmetricsMockRecorder struct {
+	mock *Mockmetrics
+}
+
+// NewMockmetrics creates a new mock instance.
+func NewMockmetrics(ctrl *gomock.Controller) *Mockmetrics {
+	mock := &Mockmetrics{ctrl: ctrl}
+	mock.recorder = &MockmetricsMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *Mockmetrics) EXPECT() *MockmetricsMockRecorder {
+	return m.recorder
+}
+
+// IncCreated mocks base method.
+func (m *Mockmetrics) IncCreated(ctx context.Context) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IncCreated", ctx)
+}
+
+// IncCreated indicates an expected call of IncCreated.
+func (mr *MockmetricsMockRecorder) IncCreated(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncCreated", reflect.TypeOf((*Mockmetrics)(nil).IncCreated), ctx)
+}
+
 // MocktripRepository is a mock of tripRepository interface.
 type MocktripRepository struct {
 	ctrl     *gomock.Controller

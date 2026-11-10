@@ -13,39 +13,35 @@ import (
 	"github.com/Kate-Mars/go_labs/internal/usecase/trip/finish"
 )
 
+func passthroughDo(ctrl *gomock.Controller) *MocktxManager {
+	m := NewMocktxManager(ctrl)
+	m.EXPECT().Do(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, fn func(ctx context.Context) error) error {
+			return fn(ctx)
+		})
+	return m
+}
+
 func TestFinish_Success(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	tripRepo := NewMocktripRepository(ctrl)
-	txManager := NewMocktxManager(ctrl)
+	txManager := passthroughDo(ctrl)
+	metrics := NewMockmetrics(ctrl)
 
 	id := uuid.New()
 
-	txManager.EXPECT().
-		Do(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, fn func(ctx context.Context) error) error {
-			return fn(ctx)
-		})
-
-	tripRepo.EXPECT().
-		Finish(gomock.Any(), id, gomock.Any()).
-		Return(nil)
-
-	tripRepo.EXPECT().
-		AppendStatusChange(gomock.Any(), gomock.Any()).
-		Return(nil)
-
-	finished := model.Trip{
+	tripRepo.EXPECT().Finish(gomock.Any(), id, gomock.Any()).Return(nil)
+	tripRepo.EXPECT().AppendStatusChange(gomock.Any(), gomock.Any()).Return(nil)
+	tripRepo.EXPECT().GetByID(gomock.Any(), id).Return(model.Trip{
 		ID:     id,
 		Status: model.StatusCompleted,
 		Price:  100,
-	}
-	tripRepo.EXPECT().
-		GetByID(gomock.Any(), id).
-		Return(finished, nil)
+	}, nil)
+	metrics.EXPECT().IncCompleted(gomock.Any()).Times(1)
 
-	uc := finish.New(tripRepo, txManager)
+	uc := finish.New(tripRepo, txManager, metrics)
 
 	got, err := uc.Do(context.Background(), id)
 	if err != nil {
@@ -64,21 +60,14 @@ func TestFinish_NotFound(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	tripRepo := NewMocktripRepository(ctrl)
-	txManager := NewMocktxManager(ctrl)
+	txManager := passthroughDo(ctrl)
+	metrics := NewMockmetrics(ctrl)
 
 	id := uuid.New()
 
-	txManager.EXPECT().
-		Do(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, fn func(ctx context.Context) error) error {
-			return fn(ctx)
-		})
+	tripRepo.EXPECT().Finish(gomock.Any(), id, gomock.Any()).Return(trip.ErrNotFound)
 
-	tripRepo.EXPECT().
-		Finish(gomock.Any(), id, gomock.Any()).
-		Return(trip.ErrNotFound)
-
-	uc := finish.New(tripRepo, txManager)
+	uc := finish.New(tripRepo, txManager, metrics)
 
 	_, err := uc.Do(context.Background(), id)
 	if !errors.Is(err, trip.ErrNotFound) {
@@ -91,21 +80,14 @@ func TestFinish_AlreadyDone(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	tripRepo := NewMocktripRepository(ctrl)
-	txManager := NewMocktxManager(ctrl)
+	txManager := passthroughDo(ctrl)
+	metrics := NewMockmetrics(ctrl)
 
 	id := uuid.New()
 
-	txManager.EXPECT().
-		Do(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, fn func(ctx context.Context) error) error {
-			return fn(ctx)
-		})
+	tripRepo.EXPECT().Finish(gomock.Any(), id, gomock.Any()).Return(trip.ErrAlreadyDone)
 
-	tripRepo.EXPECT().
-		Finish(gomock.Any(), id, gomock.Any()).
-		Return(trip.ErrAlreadyDone)
-
-	uc := finish.New(tripRepo, txManager)
+	uc := finish.New(tripRepo, txManager, metrics)
 
 	_, err := uc.Do(context.Background(), id)
 	if !errors.Is(err, trip.ErrAlreadyDone) {
@@ -119,8 +101,9 @@ func TestFinish_EmptyID(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	tripRepo := NewMocktripRepository(ctrl)
 	txManager := NewMocktxManager(ctrl)
+	metrics := NewMockmetrics(ctrl)
 
-	uc := finish.New(tripRepo, txManager)
+	uc := finish.New(tripRepo, txManager, metrics)
 
 	_, err := uc.Do(context.Background(), uuid.UUID{})
 

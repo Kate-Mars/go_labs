@@ -19,7 +19,7 @@ trip-service
 # tests
 *_test.go
 *.md
-!README.md
+!README.md.lab1.disabled
 
 # others
 Makefile

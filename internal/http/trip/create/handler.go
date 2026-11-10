@@ -1,6 +1,8 @@
+//go:generate go tool mockgen -source ${GOFILE} -destination mocks_test.go -package ${GOPACKAGE}_test
 package create
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -11,13 +13,19 @@ import (
 	uc "github.com/Kate-Mars/go_labs/internal/usecase/trip/create"
 )
 
-type Handler struct {
-	log *slog.Logger
-	uc  *uc.Usecase
+// usecase — что хендлеру нужно от слоя сценариев.
+// Объявлен здесь (на стороне потребителя), чтобы можно было мокать в тестах.
+type usecase interface {
+	Do(ctx context.Context, in uc.Input) (uc.Output, error)
 }
 
-func NewHandler(log *slog.Logger, uc *uc.Usecase) *Handler {
-	return &Handler{log: log, uc: uc}
+type Handler struct {
+	log *slog.Logger
+	uc  usecase
+}
+
+func NewHandler(log *slog.Logger, u usecase) *Handler {
+	return &Handler{log: log, uc: u}
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request, params api.CreateTripParams) {

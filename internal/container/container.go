@@ -4,13 +4,15 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/Kate-Mars/go_labs/internal/infra/telemetry"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Kate-Mars/go_labs/internal/config"
-	httprouter "github.com/Kate-Mars/go_labs/internal/http"
-	"github.com/Kate-Mars/go_labs/internal/http/trip/create"
-	"github.com/Kate-Mars/go_labs/internal/http/trip/finish"
-	"github.com/Kate-Mars/go_labs/internal/http/trip/get"
+	apphttp "github.com/Kate-Mars/go_labs/internal/http"
+	"github.com/Kate-Mars/go_labs/internal/http/middleware"
+	createh "github.com/Kate-Mars/go_labs/internal/http/trip/create"
+	finishh "github.com/Kate-Mars/go_labs/internal/http/trip/finish"
+	geth "github.com/Kate-Mars/go_labs/internal/http/trip/get"
 	"github.com/Kate-Mars/go_labs/internal/infra/postgres"
 	"github.com/Kate-Mars/go_labs/internal/infra/postgres/transaction"
 	idemrepo "github.com/Kate-Mars/go_labs/internal/repository/idempotency"
@@ -21,8 +23,9 @@ import (
 )
 
 type Container struct {
-	Pool   *pgxpool.Pool
-	Router *httprouter.Server
+	Pool    *pgxpool.Pool
+	Router  *apphttp.Server
+	Metrics *middleware.Metrics
 }
 
 func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*Container, error) {
@@ -31,20 +34,35 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*Container,
 		return nil, err
 	}
 
-	txManager := transaction.NewManager(pool)
+	bizMetrics, err := telemetry.NewBusinessMetrics()
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
 
+	txManager := transaction.NewManager(pool)
 	tripRepo := triprepo.New(pool)
 	idemRepo := idemrepo.New(pool)
 
-	createUC := createuc.New(tripRepo, idemRepo, txManager)
+	createUC := createuc.New(tripRepo, idemRepo, txManager, bizMetrics)
 	getUC := getuc.New(tripRepo)
-	finishUC := finishuc.New(tripRepo, txManager)
+	finishUC := finishuc.New(tripRepo, txManager, bizMetrics)
 
-	createH := create.NewHandler(log, createUC)
-	getH := get.NewHandler(log, getUC)
-	finishH := finish.NewHandler(log, finishUC)
+	createH := createh.NewHandler(log, createUC)
+	getH := geth.NewHandler(log, getUC)
+	finishH := finishh.NewHandler(log, finishUC)
 
-	server := httprouter.NewServer(log, createH, getH, finishH)
+	server := apphttp.NewServer(log, createH, getH, finishH)
 
-	return &Container{Pool: pool, Router: server}, nil
+	metrics, err := middleware.NewMetrics()
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
+
+	return &Container{
+		Pool:    pool,
+		Router:  server,
+		Metrics: metrics,
+	}, nil
 }

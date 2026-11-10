@@ -13,10 +13,11 @@ import (
 type Usecase struct {
 	tripRepo  tripRepository
 	txManager txManager
+	metrics   metrics
 }
 
-func New(tripRepo tripRepository, txManager txManager) *Usecase {
-	return &Usecase{tripRepo: tripRepo, txManager: txManager}
+func New(tripRepo tripRepository, txManager txManager, m metrics) *Usecase {
+	return &Usecase{tripRepo: tripRepo, txManager: txManager, metrics: m}
 }
 
 func (u *Usecase) Do(ctx context.Context, id uuid.UUID) (model.Trip, error) {
@@ -42,5 +43,11 @@ func (u *Usecase) Do(ctx context.Context, id uuid.UUID) (model.Trip, error) {
 		return model.Trip{}, err
 	}
 
-	return u.tripRepo.GetByID(ctx, id)
+	t, err := u.tripRepo.GetByID(ctx, id)
+	if err != nil {
+		return model.Trip{}, err
+	}
+
+	u.metrics.IncCompleted(ctx)
+	return t, nil
 }

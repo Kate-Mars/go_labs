@@ -10,6 +10,10 @@ import (
 	model "github.com/Kate-Mars/go_labs/internal/model/trip"
 )
 
+type metrics interface {
+	IncCompleted(ctx context.Context)
+}
+
 type tripRepository interface {
 	Finish(ctx context.Context, id uuid.UUID, at time.Time) error
 	GetByID(ctx context.Context, id uuid.UUID) (model.Trip, error)

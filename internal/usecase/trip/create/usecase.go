@@ -13,6 +13,7 @@ import (
 	model "github.com/Kate-Mars/go_labs/internal/model/trip"
 )
 
+// Input — вход usecase создания поездки.
 type Input struct {
 	UserID         uuid.UUID
 	DriverID       uuid.UUID
@@ -21,25 +22,31 @@ type Input struct {
 	EndLatitude    float64
 	EndLongitude   float64
 	Price          int64
+
+	// IdempotencyKey — если задан, usecase работает идемпотентно.
 	IdempotencyKey *uuid.UUID
 }
 
+// Output — что usecase возвращает.
 type Output struct {
 	Trip    model.Trip
-	Created bool
+	Created bool // true — создана только что (201), false — повтор (200).
 }
 
+// Usecase — сценарий создания поездки.
 type Usecase struct {
 	tripRepo  tripRepository
 	idemRepo  idempotencyRepository
 	txManager txManager
+	metrics   metrics
 }
 
-func New(tripRepo tripRepository, idemRepo idempotencyRepository, txManager txManager) *Usecase {
+func New(tripRepo tripRepository, idemRepo idempotencyRepository, txManager txManager, m metrics) *Usecase {
 	return &Usecase{
 		tripRepo:  tripRepo,
 		idemRepo:  idemRepo,
 		txManager: txManager,
+		metrics:   m,
 	}
 }
 
@@ -73,6 +80,7 @@ func (u *Usecase) doPlain(ctx context.Context, in Input) (Output, error) {
 		return Output{}, err
 	}
 
+	u.metrics.IncCreated(ctx)
 	return Output{Trip: t, Created: true}, nil
 }
 
@@ -114,6 +122,7 @@ func (u *Usecase) doIdempotent(ctx context.Context, in Input, key uuid.UUID) (Ou
 			return nil
 		}
 
+		// Ключ занят — читаем запись.
 		rec, err := u.idemRepo.Get(ctx, key)
 		if err != nil {
 			return err
@@ -134,6 +143,11 @@ func (u *Usecase) doIdempotent(ctx context.Context, in Input, key uuid.UUID) (Ou
 	})
 	if err != nil {
 		return Output{}, err
+	}
+
+	// Увеличиваем счётчик только при создании, не при повторе.
+	if created {
+		u.metrics.IncCreated(ctx)
 	}
 
 	return Output{Trip: result, Created: created}, nil

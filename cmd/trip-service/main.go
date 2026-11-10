@@ -15,6 +15,7 @@ import (
 	"github.com/Kate-Mars/go_labs/internal/config"
 	"github.com/Kate-Mars/go_labs/internal/container"
 	"github.com/Kate-Mars/go_labs/internal/http/router"
+	"github.com/Kate-Mars/go_labs/internal/infra/telemetry"
 )
 
 func main() {
@@ -28,13 +29,26 @@ func main() {
 
 	log := newLogger(cfg.LogLevel)
 
-	cnt, err := container.New(context.Background(), cfg, log)
+	ctx := context.Background()
+
+	traceShutdown, err := telemetry.SetupTracing(ctx, cfg)
+	if err != nil {
+		log.Error("telemetry tracing setup failed", "err", err)
+		os.Exit(1)
+	}
+	metricShutdown, err := telemetry.SetupMetrics(ctx, cfg)
+	if err != nil {
+		log.Error("telemetry metrics setup failed", "err", err)
+		os.Exit(1)
+	}
+
+	cnt, err := container.New(ctx, cfg, log)
 	if err != nil {
 		log.Error("container init failed", "err", err)
 		os.Exit(1)
 	}
 
-	handler := router.NewRouter(cnt.Router)
+	handler := router.NewRouter(log, cnt.Router, cnt.Metrics)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -58,6 +72,7 @@ func main() {
 	case err := <-errCh:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("http server failed", "err", err)
+			shutdownTelemetry(log, traceShutdown, metricShutdown)
 			cnt.Pool.Close()
 			os.Exit(1)
 		}
@@ -65,18 +80,32 @@ func main() {
 		log.Info("stop signal received", "signal", sig.String())
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("graceful shutdown failed", "err", err)
 		cancel()
+		shutdownTelemetry(log, traceShutdown, metricShutdown)
 		cnt.Pool.Close()
 		os.Exit(1)
 	}
 
+	shutdownTelemetry(log, traceShutdown, metricShutdown)
 	cancel()
 	cnt.Pool.Close()
 	log.Info("server stopped")
+}
+
+func shutdownTelemetry(log *slog.Logger, traceShutdown, metricShutdown telemetry.ShutdownFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := traceShutdown(ctx); err != nil {
+		log.Error("tracer shutdown failed", "err", err)
+	}
+	if err := metricShutdown(ctx); err != nil {
+		log.Error("meter shutdown failed", "err", err)
+	}
 }
 
 func newLogger(level string) *slog.Logger {
