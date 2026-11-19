@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"bytes"
+	"io"
 
 	api "github.com/Kate-Mars/go_labs/internal/generated"
 	"github.com/Kate-Mars/go_labs/internal/http/common"
@@ -30,17 +32,39 @@ func NewHandler(log *slog.Logger, u usecase) *Handler {
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request, params api.CreateTripParams) {
 	var req api.TripData
+	var raw map[string]json.RawMessage
+	
 	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
-		common.Problem(w, h.log, r, http.StatusBadRequest, api.Problem{
-			Type:   "https://tripgo.example/problems/invalid-request",
-			Title:  "Invalid request",
-			Status: http.StatusBadRequest,
-			Code:   "invalid_request",
-			Detail: ptr("Request body is not valid JSON"),
-		})
-		return
+	
+	if err := dec.Decode(&raw); err != nil {
+	    invalidRequest(w, h.log, r)
+	    return
+	}
+	
+	if !requiredFields(raw) {
+	    invalidRequest(w, h.log, r)
+	    return
+	}
+	
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+	    invalidRequest(w, h.log, r)
+	    return
+	}
+	
+	data, err := json.Marshal(raw)
+	if err != nil {
+	    invalidRequest(w, h.log, r)
+	    return
+	}
+	
+	strict := json.NewDecoder(bytes.NewReader(data))
+	strict.DisallowUnknownFields()
+	
+	if err := strict.Decode(&req); err != nil {
+	    invalidRequest(w, h.log, r)
+	    return
+	}
 	}
 
 	in := uc.Input{
@@ -73,6 +97,69 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request, params api.Crea
 	}
 	w.Header().Set("Location", "/api/v1/trips/"+resp.Id.String())
 	common.JSON(w, h.log, status, resp)
+}
+
+func requiredFields(raw map[string]json.RawMessage) bool {
+    if raw == nil {
+        return false
+    }
+
+    required := []string{
+        "user_id",
+        "driver_id",
+        "price",
+        "start_point",
+        "end_point",
+    }
+
+    for _, field := range required {
+        if !present(raw, field) {
+            return false
+        }
+    }
+
+    for _, field := range []string{"start_point", "end_point"} {
+        var point map[string]json.RawMessage
+
+        if err := json.Unmarshal(raw[field], &point); err != nil {
+            return false
+        }
+
+        if !present(point, "latitude") ||
+            !present(point, "longitude") {
+            return false
+        }
+    }
+
+    return true
+}
+
+func present(raw map[string]json.RawMessage, key string) bool {
+    value, exists := raw[key]
+
+    return exists &&
+        len(value) > 0 &&
+        string(value) != "null"
+}
+
+func invalidRequest(
+    w http.ResponseWriter,
+    log *slog.Logger,
+    r *http.Request,
+) {
+    common.Problem(
+        w,
+        log,
+        r,
+        http.StatusBadRequest,
+        api.Problem{
+            Type: "https://tripgo.example/problems/invalid-request",
+            Title: "Invalid request",
+            Status: http.StatusBadRequest,
+            Code: "invalid_request",
+            Detail: ptr("Request body is invalid or required fields are missing"),
+        },
+    )
 }
 
 func ptr(s string) *string { return &s }
