@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"time"
 )
@@ -19,8 +20,13 @@ type Config struct {
 	DatabaseConnectTimeout  time.Duration
 	DatabaseQueryTimeout    time.Duration
 
-	OTELEndpoint    string
-	OTELServiceName string
+	OTELEndpoint           string
+	OTELServiceName        string
+	OTELExporterProtocol   string
+	OTELTracesSampler      string
+	OTELTracesSamplerArg   string
+	OTELResourceAttributes string
+	ServiceVersion         string
 }
 
 func Load() (*Config, error) {
@@ -60,6 +66,11 @@ func Load() (*Config, error) {
 	// --- телеметрия (ЛР2) ---
 	cfg.OTELEndpoint = getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4318")
 	cfg.OTELServiceName = getEnv("OTEL_SERVICE_NAME", "trip-service")
+	cfg.OTELExporterProtocol = getEnv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+	cfg.OTELTracesSampler = getEnv("OTEL_TRACES_SAMPLER", "parentbased_always_on")
+	cfg.OTELTracesSamplerArg = getEnv("OTEL_TRACES_SAMPLER_ARG", "")
+	cfg.OTELResourceAttributes = getEnv("OTEL_RESOURCE_ATTRIBUTES", "")
+	cfg.ServiceVersion = detectVersion()
 
 	// --- валидация ---
 	if cfg.ShutdownTimeout <= 0 {
@@ -73,7 +84,40 @@ func Load() (*Config, error) {
 			cfg.DatabaseMaxConns, cfg.DatabaseMinConns)
 	}
 
+	switch cfg.OTELExporterProtocol {
+	case "http/protobuf", "grpc":
+	default:
+		return nil, fmt.Errorf("OTEL_EXPORTER_OTLP_PROTOCOL must be http/protobuf or grpc, got %q",
+			cfg.OTELExporterProtocol)
+	}
+
+	switch cfg.OTELTracesSampler {
+	case "always_on", "always_off", "traceidratio",
+		"parentbased_always_on", "parentbased_always_off", "parentbased_traceidratio":
+	default:
+		return nil, fmt.Errorf("OTEL_TRACES_SAMPLER has unsupported value %q", cfg.OTELTracesSampler)
+	}
+
 	return cfg, nil
+}
+
+// detectVersion достаёт версию сборки из build info (git tag или module version).
+// Если build info недоступна (go run), возвращает "dev".
+func detectVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "dev"
+	}
+	if info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	// ищем vcs.revision
+	for _, s := range info.Settings {
+		if s.Key == "vcs.revision" && len(s.Value) >= 7 {
+			return s.Value[:7]
+		}
+	}
+	return "dev"
 }
 
 // --- хелперы ---

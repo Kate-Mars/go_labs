@@ -32,13 +32,21 @@ func TestFinish_Success(t *testing.T) {
 
 	id := uuid.New()
 
-	tripRepo.EXPECT().Finish(gomock.Any(), id, gomock.Any()).Return(nil)
-	tripRepo.EXPECT().AppendStatusChange(gomock.Any(), gomock.Any()).Return(nil)
-	tripRepo.EXPECT().GetByID(gomock.Any(), id).Return(model.Trip{
+	active := model.Trip{
+		ID:     id,
+		Status: model.StatusActive,
+		Price:  100,
+	}
+	completed := model.Trip{
 		ID:     id,
 		Status: model.StatusCompleted,
 		Price:  100,
-	}, nil)
+	}
+
+	tripRepo.EXPECT().GetByID(gomock.Any(), id).Return(active, nil)
+	tripRepo.EXPECT().Finish(gomock.Any(), id, gomock.Any()).Return(nil)
+	tripRepo.EXPECT().AppendStatusChange(gomock.Any(), gomock.Any()).Return(nil)
+	tripRepo.EXPECT().GetByID(gomock.Any(), id).Return(completed, nil)
 	metrics.EXPECT().IncCompleted(gomock.Any()).Times(1)
 
 	uc := finish.New(tripRepo, txManager, metrics)
@@ -65,7 +73,7 @@ func TestFinish_NotFound(t *testing.T) {
 
 	id := uuid.New()
 
-	tripRepo.EXPECT().Finish(gomock.Any(), id, gomock.Any()).Return(trip.ErrNotFound)
+	tripRepo.EXPECT().GetByID(gomock.Any(), id).Return(model.Trip{}, trip.ErrNotFound)
 
 	uc := finish.New(tripRepo, txManager, metrics)
 
@@ -85,7 +93,10 @@ func TestFinish_AlreadyDone(t *testing.T) {
 
 	id := uuid.New()
 
-	tripRepo.EXPECT().Finish(gomock.Any(), id, gomock.Any()).Return(trip.ErrAlreadyDone)
+	tripRepo.EXPECT().GetByID(gomock.Any(), id).Return(model.Trip{
+		ID:     id,
+		Status: model.StatusCompleted,
+	}, nil)
 
 	uc := finish.New(tripRepo, txManager, metrics)
 

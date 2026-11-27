@@ -17,13 +17,13 @@ func JSON(w http.ResponseWriter, log *slog.Logger, status int, body any) {
 }
 
 func Problem(w http.ResponseWriter, log *slog.Logger, r *http.Request, status int, p api.Problem) {
-	if p.Instance == nil {
-		inst := r.URL.Path
-		p.Instance = &inst
-	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(p); err != nil {
-		log.Error("encode problem", "err", err)
+		log.Error("encode problem response failed",
+			"err", err,
+			"path", r.URL.Path,
+			"method", r.Method,
+		)
 	}
 }

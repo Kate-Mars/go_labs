@@ -1,9 +1,13 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	api "github.com/Kate-Mars/go_labs/internal/generated"
 	"github.com/Kate-Mars/go_labs/internal/http/trip/create"
@@ -13,6 +17,7 @@ import (
 
 type Server struct {
 	log    *slog.Logger
+	pool   *pgxpool.Pool
 	create *create.Handler
 	get    *get.Handler
 	finish *finish.Handler
@@ -20,12 +25,14 @@ type Server struct {
 
 func NewServer(
 	log *slog.Logger,
+	pool *pgxpool.Pool,
 	createH *create.Handler,
 	getH *get.Handler,
 	finishH *finish.Handler,
 ) *Server {
 	return &Server{
 		log:    log,
+		pool:   pool,
 		create: createH,
 		get:    getH,
 		finish: finishH,
@@ -49,8 +56,15 @@ func (s *Server) Health(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, api.HealthResponse{Status: api.Ok})
 }
 
-//nolint:unparam // r нужен по сигнатуре api.ServerInterface
 func (s *Server) Ready(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	if err := s.pool.Ping(ctx); err != nil {
+		s.log.Warn("ready: db ping failed", "err", err)
+		s.writeJSON(w, http.StatusServiceUnavailable, api.HealthResponse{Status: api.Unavailable})
+		return
+	}
 	s.writeJSON(w, http.StatusOK, api.HealthResponse{Status: api.Ok})
 }
 

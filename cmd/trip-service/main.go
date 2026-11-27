@@ -72,40 +72,47 @@ func main() {
 	case err := <-errCh:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("http server failed", "err", err)
-			shutdownTelemetry(log, traceShutdown, metricShutdown)
-			cnt.Pool.Close()
+			shutdownAll(log, cfg, nil, nil, traceShutdown, metricShutdown, cnt)
 			os.Exit(1)
 		}
 	case sig := <-stop:
 		log.Info("stop signal received", "signal", sig.String())
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Error("graceful shutdown failed", "err", err)
-		cancel()
-		shutdownTelemetry(log, traceShutdown, metricShutdown)
-		cnt.Pool.Close()
-		os.Exit(1)
-	}
-
-	shutdownTelemetry(log, traceShutdown, metricShutdown)
-	cancel()
-	cnt.Pool.Close()
+	shutdownAll(log, cfg, srv, nil, traceShutdown, metricShutdown, cnt)
 	log.Info("server stopped")
 }
 
-func shutdownTelemetry(log *slog.Logger, traceShutdown, metricShutdown telemetry.ShutdownFunc) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func shutdownAll(
+	log *slog.Logger,
+	cfg *config.Config,
+	srv *http.Server,
+	_ any, // зарезервировано под будущие компоненты (ЛР3+)
+	traceShutdown telemetry.ShutdownFunc,
+	metricShutdown telemetry.ShutdownFunc,
+	cnt *container.Container,
+) {
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 
-	if err := traceShutdown(ctx); err != nil {
-		log.Error("tracer shutdown failed", "err", err)
+	if srv != nil {
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Error("http shutdown failed", "err", err)
+		}
 	}
-	if err := metricShutdown(ctx); err != nil {
-		log.Error("meter shutdown failed", "err", err)
+
+	if traceShutdown != nil {
+		if err := traceShutdown(ctx); err != nil {
+			log.Error("tracer shutdown failed", "err", err)
+		}
 	}
+	if metricShutdown != nil {
+		if err := metricShutdown(ctx); err != nil {
+			log.Error("meter shutdown failed", "err", err)
+		}
+	}
+
+	cnt.Pool.Close()
 }
 
 func newLogger(level string) *slog.Logger {

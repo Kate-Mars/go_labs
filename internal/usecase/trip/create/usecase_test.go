@@ -3,8 +3,8 @@ package create_test
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -254,13 +254,70 @@ func TestCreate_CoordsBoundaries(t *testing.T) {
 	}
 }
 
+// близкие координаты
+func TestCreate_Idempotency_DifferentCoordinatesDifferentHash(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	tripRepo := NewMocktripRepository(ctrl)
+	idemRepo := NewMockidempotencyRepository(ctrl)
+	txManager := passthroughDo(ctrl)
+	metrics := NewMockmetrics(ctrl)
+
+	key := uuid.New()
+	tripID := uuid.New()
+
+	firstIn := create.Input{
+		UserID:        uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+		DriverID:      uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+		StartLatitude: 55.1234561,
+		Price:         100,
+	}
+	secondIn := firstIn
+	secondIn.StartLatitude = 55.1234564
+
+	existing := &model.IdempotencyRecord{
+		Key:         key,
+		TripID:      &tripID,
+		RequestHash: hashOf(firstIn),
+	}
+
+	idemRepo.EXPECT().InsertIfAbsent(gomock.Any(), gomock.Any()).Return(false, nil)
+	idemRepo.EXPECT().Get(gomock.Any(), key).Return(existing, nil)
+
+	uc := create.New(tripRepo, idemRepo, txManager, metrics)
+
+	_, err := uc.Do(context.Background(), create.Input{
+		UserID:         secondIn.UserID,
+		DriverID:       secondIn.DriverID,
+		StartLatitude:  secondIn.StartLatitude,
+		Price:          secondIn.Price,
+		IdempotencyKey: &key,
+	})
+	if !errors.Is(err, trip.ErrIdempotencyConflict) {
+		t.Errorf("err = %v, want ErrIdempotencyConflict (different coords must not be replay)", err)
+	}
+}
+
 func hashOf(in create.Input) []byte {
-	h := sha256.New()
-	fmt.Fprintf(h, "%s|%s|%f|%f|%f|%f|%d",
-		in.UserID, in.DriverID,
-		in.StartLatitude, in.StartLongitude,
-		in.EndLatitude, in.EndLongitude,
-		in.Price,
-	)
-	return h.Sum(nil)
+	payload := struct {
+		UserID         uuid.UUID `json:"user_id"`
+		DriverID       uuid.UUID `json:"driver_id"`
+		StartLatitude  float64   `json:"start_latitude"`
+		StartLongitude float64   `json:"start_longitude"`
+		EndLatitude    float64   `json:"end_latitude"`
+		EndLongitude   float64   `json:"end_longitude"`
+		Price          int64     `json:"price"`
+	}{
+		UserID:         in.UserID,
+		DriverID:       in.DriverID,
+		StartLatitude:  in.StartLatitude,
+		StartLongitude: in.StartLongitude,
+		EndLatitude:    in.EndLatitude,
+		EndLongitude:   in.EndLongitude,
+		Price:          in.Price,
+	}
+	b, _ := json.Marshal(payload)
+	sum := sha256.Sum256(b)
+	return sum[:]
 }

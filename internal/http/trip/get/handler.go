@@ -32,9 +32,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request, tripID api.TripId)
 	t, err := h.uc.Do(r.Context(), tripID)
 	if err != nil {
 		status, p := domainerror.Problem(err)
-		if status == http.StatusInternalServerError {
-			h.log.Error("get trip failed", "err", err, "trip_id", tripID)
-		}
+		// Логирование ошибки — в middleware.Logging (одно место, с trace_id/span_id).
 		common.Problem(w, h.log, r, status, p)
 		return
 	}

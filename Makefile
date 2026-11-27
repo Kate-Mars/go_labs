@@ -1,4 +1,4 @@
-.PHONY: generate migrate run tools docker-build docker-run
+.PHONY: generate migrate migrate-down migrate-reset run tools docker-build docker-run lint test test-integration mutate
 
 ifneq (,$(wildcard .env))
     include .env
@@ -24,6 +24,11 @@ test:
 	go tool cover -func=coverage.out | tail -n 1
 
 test-integration:
+	@if [ -z "$$DATABASE_URL" ]; then \
+		echo "ERROR: DATABASE_URL is required for test-integration"; \
+		echo "  source .env or run 'tripgoctl connect' first"; \
+		exit 1; \
+	fi
 	go test -race -tags=integration -cover ./...
 
 generate:

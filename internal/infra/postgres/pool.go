@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Kate-Mars/go_labs/internal/config"
+	"github.com/Kate-Mars/go_labs/internal/infra/postgres/tracing"
 )
 
 func NewPool(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
@@ -23,7 +23,7 @@ func NewPool(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
 	poolCfg.MaxConnIdleTime = 5 * time.Minute
 	poolCfg.HealthCheckPeriod = 30 * time.Second
 
-	poolCfg.ConnConfig.Tracer = otelpgx.NewTracer()
+	poolCfg.ConnConfig.Tracer = tracing.NewQueryTracer()
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {

@@ -34,7 +34,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*Container,
 		return nil, err
 	}
 
-	bizMetrics, err := telemetry.NewBusinessMetrics()
+	bizMetrics, err := telemetry.NewBusinessMetrics(pool)
 	if err != nil {
 		pool.Close()
 		return nil, err
@@ -52,7 +52,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*Container,
 	getH := geth.NewHandler(log, getUC)
 	finishH := finishh.NewHandler(log, finishUC)
 
-	server := apphttp.NewServer(log, createH, getH, finishH)
+	server := apphttp.NewServer(log, pool, createH, getH, finishH)
 
 	metrics, err := middleware.NewMetrics()
 	if err != nil {

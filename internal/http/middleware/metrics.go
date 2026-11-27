@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Metrics struct {
@@ -48,21 +49,29 @@ func (m *Metrics) Middleware() func(http.Handler) http.Handler {
 			start := time.Now()
 			ctx := r.Context()
 
-			attrs := make([]attribute.KeyValue, 0, 3)
-			attrs = append(attrs,
+			activeAttrs := []attribute.KeyValue{
 				attribute.String("http.request.method", r.Method),
-				attribute.String("http.route", r.Pattern),
-			)
-
-			m.activeRequests.Add(ctx, 1, metric.WithAttributes(attrs...))
-			defer m.activeRequests.Add(ctx, -1, metric.WithAttributes(attrs...))
+			}
+			m.activeRequests.Add(ctx, 1, metric.WithAttributes(activeAttrs...))
+			defer m.activeRequests.Add(ctx, -1, metric.WithAttributes(activeAttrs...))
 
 			ww := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(ww, r)
 
-			attrs = append(attrs,
+			route := r.Pattern
+			if route == "" {
+				route = "unknown"
+			}
+
+			if span := trace.SpanFromContext(ctx); span.IsRecording() {
+				span.SetName(r.Method + " " + route)
+			}
+
+			attrs := []attribute.KeyValue{
+				attribute.String("http.request.method", r.Method),
+				attribute.String("http.route", route),
 				attribute.String("http.response.status_code", strconv.Itoa(ww.status)),
-			)
+			}
 			m.requestDuration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(attrs...))
 		})
 	}

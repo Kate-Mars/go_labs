@@ -1,14 +1,12 @@
 package finish_test
 
 import (
-	"context"
 	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -136,55 +134,5 @@ func TestHandler_Finish_InternalError(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), errTest.Error()) {
 		t.Errorf("body leaks internal error: %s", rec.Body.String())
-	}
-}
-
-type countingHandler struct {
-	mu     sync.Mutex
-	errors int
-}
-
-func (h *countingHandler) Enabled(context.Context, slog.Level) bool { return true }
-func (h *countingHandler) Handle(_ context.Context, r slog.Record) error {
-	if r.Level == slog.LevelError {
-		h.mu.Lock()
-		h.errors++
-		h.mu.Unlock()
-	}
-	return nil
-}
-func (h *countingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *countingHandler) WithGroup(string) slog.Handler      { return h }
-
-func (h *countingHandler) count() int {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return h.errors
-}
-
-func TestHandler_Finish_InternalError_LogsError(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	mockUC := NewMockusecase(ctrl)
-
-	tripID := uuid.New()
-	mockUC.EXPECT().
-		Do(gomock.Any(), tripID).
-		Return(model.Trip{}, errTest)
-
-	logHandler := &countingHandler{}
-	h := finish.NewHandler(slog.New(logHandler), mockUC)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/trips/"+tripID.String()+"/finish", nil)
-	rec := httptest.NewRecorder()
-
-	h.Finish(rec, req, tripID)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want 500", rec.Code)
-	}
-	if logHandler.count() == 0 {
-		t.Errorf("expected at least one Error log, got 0")
 	}
 }

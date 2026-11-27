@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"fmt"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -170,13 +170,32 @@ func toModelTrip(in Input, now time.Time) model.Trip {
 	}
 }
 
+// hashInput считает хеш тела запроса для идемпотентности.
+// близкие координаты дают разные хеши.
 func hashInput(in Input) []byte {
-	h := sha256.New()
-	fmt.Fprintf(h, "%s|%s|%f|%f|%f|%f|%d",
-		in.UserID, in.DriverID,
-		in.StartLatitude, in.StartLongitude,
-		in.EndLatitude, in.EndLongitude,
-		in.Price,
-	)
-	return h.Sum(nil)
+	payload := struct {
+		UserID         uuid.UUID `json:"user_id"`
+		DriverID       uuid.UUID `json:"driver_id"`
+		StartLatitude  float64   `json:"start_latitude"`
+		StartLongitude float64   `json:"start_longitude"`
+		EndLatitude    float64   `json:"end_latitude"`
+		EndLongitude   float64   `json:"end_longitude"`
+		Price          int64     `json:"price"`
+	}{
+		UserID:         in.UserID,
+		DriverID:       in.DriverID,
+		StartLatitude:  in.StartLatitude,
+		StartLongitude: in.StartLongitude,
+		EndLatitude:    in.EndLatitude,
+		EndLongitude:   in.EndLongitude,
+		Price:          in.Price,
+	}
+
+	b, err := json.Marshal(payload)
+	if err != nil {
+		panic("create: marshal idempotency payload: " + err.Error())
+	}
+
+	sum := sha256.Sum256(b)
+	return sum[:]
 }

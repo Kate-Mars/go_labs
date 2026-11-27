@@ -28,9 +28,20 @@ func (u *Usecase) Do(ctx context.Context, id uuid.UUID) (model.Trip, error) {
 	now := time.Now().UTC()
 
 	err := u.txManager.Do(ctx, func(ctx context.Context) error {
+		m, err := u.tripRepo.GetByID(ctx, id)
+		if err != nil {
+			return err
+		}
+
+		dt := toDomain(m)
+		if err := dt.Finish(now); err != nil {
+			return err
+		}
+
 		if err := u.tripRepo.Finish(ctx, id, now); err != nil {
 			return err
 		}
+
 		active := model.StatusActive
 		return u.tripRepo.AppendStatusChange(ctx, model.StatusChange{
 			TripID:     id,
@@ -50,4 +61,22 @@ func (u *Usecase) Do(ctx context.Context, id uuid.UUID) (model.Trip, error) {
 
 	u.metrics.IncCompleted(ctx)
 	return t, nil
+}
+
+func toDomain(m model.Trip) trip.Trip {
+	return trip.Trip{
+		ID:             m.ID,
+		UserID:         m.UserID,
+		DriverID:       m.DriverID,
+		StartLatitude:  m.StartLatitude,
+		StartLongitude: m.StartLongitude,
+		EndLatitude:    m.EndLatitude,
+		EndLongitude:   m.EndLongitude,
+		Price:          m.Price,
+		Status:         trip.Status(m.Status),
+		StartedAt:      m.StartedAt,
+		FinishedAt:     m.FinishedAt,
+		CreatedAt:      m.CreatedAt,
+		UpdatedAt:      m.UpdatedAt,
+	}
 }

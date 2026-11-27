@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/metric/noop"
 )
 
 func Tracing() func(http.Handler) http.Handler {
@@ -12,6 +13,7 @@ func Tracing() func(http.Handler) http.Handler {
 			otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
 				return r.Method + " " + r.Pattern
 			}),
+			otelhttp.WithMeterProvider(noop.NewMeterProvider()),
 		)
 	}
 }

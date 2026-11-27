@@ -57,6 +57,16 @@ linters:
               desc: домен не строит SQL
             - pkg: go.opentelemetry.io/otel
               desc: домен не знает про телеметрию
+            - pkg: github.com/Kate-Mars/go_labs/internal/generated
+              desc: домен не знает про сгенерированный транспортный API
+            - pkg: github.com/Kate-Mars/go_labs/internal/infra
+              desc: домен не знает про инфраструктуру
+            - pkg: github.com/Kate-Mars/go_labs/internal/repository
+              desc: домен не знает про репозитории
+            - pkg: github.com/Kate-Mars/go_labs/internal/http
+              desc: домен не знает про транспорт
+            - pkg: github.com/Kate-Mars/go_labs/internal/model
+              desc: домен не зависит от транспортных моделей
         usecase:
           files:
             - "**/internal/usecase/**"
@@ -69,13 +79,34 @@ linters:
               desc: usecase работает через интерфейсы, а не через драйвер бд
             - pkg: github.com/Masterminds/squirrel
               desc: usecase не строит SQL
+            - pkg: github.com/Kate-Mars/go_labs/internal/generated
+              desc: usecase не знает про сгенерированный транспортный API
+            - pkg: github.com/Kate-Mars/go_labs/internal/infra
+              desc: usecase не знает про инфраструктуру
+            - pkg: github.com/Kate-Mars/go_labs/internal/http
+              desc: usecase не знает про транспорт
+        http:
+          files:
+            - "**/internal/http/**"
+          deny:
+            - pkg: github.com/Kate-Mars/go_labs/internal/repository
+              desc: http ходит через usecase, а не через репозитории
+            - pkg: github.com/Kate-Mars/go_labs/internal/infra
+              desc: http не зависит от инфраструктуры напрямую
+        repository:
+          files:
+            - "**/internal/repository/**"
+          deny:
+            - pkg: github.com/Kate-Mars/go_labs/internal/http
+              desc: repository не знает про транспорт
+            - pkg: github.com/Kate-Mars/go_labs/internal/usecase
+              desc: repository не знает про сценарии
 
     # Запрещает обращения через идентификатор с подчёркиванием, поэтому пакеты
     # называем без snake_case: internal/adapter/http, а не internal/adapter/http_server.
     forbidigo:
       forbid:
         - pattern: ^[A-Za-z0-9]{1,}_.*\.
-
     revive:
       rules:
         - name: var-naming

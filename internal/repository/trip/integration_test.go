@@ -121,13 +121,12 @@ func TestRepo_Finish(t *testing.T) {
 		t.Fatalf("Finish: %v", err)
 	}
 
-	// повторный Finish → ErrAlreadyDone
 	if err := r.Finish(ctx, tr.ID, time.Now().UTC()); !errors.Is(err, trip.ErrAlreadyDone) {
 		t.Errorf("second Finish err = %v, want ErrAlreadyDone", err)
 	}
 }
 
-func TestTxManager_Rollback(t *testing.T) {
+func TestTxManager_Rollback_TwoInserts(t *testing.T) {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		t.Skip("DATABASE_URL not set")
@@ -145,20 +144,83 @@ func TestTxManager_Rollback(t *testing.T) {
 
 	tr := newTrip(uuid.New())
 
-	// внутри Do: Create успешен, потом ошибка → всё должно откатиться
 	err = txMgr.Do(ctx, func(ctx context.Context) error {
 		if err := r.Create(ctx, tr); err != nil {
 			return err
 		}
-		return errors.New("simulated failure")
+		if err := r.AppendStatusChange(ctx, model.StatusChange{
+			TripID:   tr.ID,
+			ToStatus: model.StatusActive,
+			Reason:   "trip created",
+		}); err != nil {
+			return err
+		}
+		return errors.New("simulated failure after both inserts")
 	})
 	if err == nil {
 		t.Fatal("expected error from Do")
 	}
 
-	// проверяем: поездки нет
 	_, getErr := r.GetByID(ctx, tr.ID)
 	if !errors.Is(getErr, trip.ErrNotFound) {
-		t.Errorf("after rollback: GetByID err = %v, want ErrNotFound", getErr)
+		t.Errorf("after rollback: trips.GetByID err = %v, want ErrNotFound", getErr)
+	}
+
+	var histCount int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM trip_status_history WHERE trip_id = $1`, tr.ID,
+	).Scan(&histCount); err != nil {
+		t.Fatalf("count trip_status_history: %v", err)
+	}
+	if histCount != 0 {
+		t.Errorf("after rollback: trip_status_history count = %d, want 0", histCount)
+	}
+}
+
+func TestTxManager_Rollback_SecondInsertFails(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("DATABASE_URL not set")
+	}
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(func() { pool.Close() })
+
+	r := repo.New(pool)
+	txMgr := transaction.NewManager(pool)
+
+	tr := newTrip(uuid.New())
+
+	err = txMgr.Do(ctx, func(ctx context.Context) error {
+		if err := r.Create(ctx, tr); err != nil {
+			return err
+		}
+		return r.AppendStatusChange(ctx, model.StatusChange{
+			TripID:   tr.ID,
+			ToStatus: model.Status("bogus"),
+			Reason:   "should fail",
+		})
+	})
+	if err == nil {
+		t.Fatal("expected error from Do (second insert must fail)")
+	}
+
+	_, getErr := r.GetByID(ctx, tr.ID)
+	if !errors.Is(getErr, trip.ErrNotFound) {
+		t.Errorf("after rollback: trips.GetByID err = %v, want ErrNotFound", getErr)
+	}
+
+	var histCount int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM trip_status_history WHERE trip_id = $1`, tr.ID,
+	).Scan(&histCount); err != nil {
+		t.Fatalf("count trip_status_history: %v", err)
+	}
+	if histCount != 0 {
+		t.Errorf("after rollback: trip_status_history count = %d, want 0", histCount)
 	}
 }
