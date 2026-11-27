@@ -2,22 +2,24 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
+
+	"github.com/joho/godotenv"
 
 	"github.com/Kate-Mars/go_labs/internal/config"
-	"github.com/Kate-Mars/go_labs/internal/repository/postgres"
-	httptransport "github.com/Kate-Mars/go_labs/internal/transport/http"
-	"github.com/joho/godotenv"
+	"github.com/Kate-Mars/go_labs/internal/container"
+	"github.com/Kate-Mars/go_labs/internal/http/router"
+	"github.com/Kate-Mars/go_labs/internal/infra/telemetry"
 )
 
 func main() {
-	_ = godotenv.Load(".env")
-	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
-		slog.Warn("failed to load .env", "err", err)
-	}
+	_ = godotenv.Load()
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -27,21 +29,40 @@ func main() {
 
 	log := newLogger(cfg.LogLevel)
 
-	pool, err := postgres.NewPool(context.Background(), cfg)
+	ctx := context.Background()
+
+	traceShutdown, err := telemetry.SetupTracing(ctx, cfg)
 	if err != nil {
-		log.Error("postgres connect failed", "err", err)
+		log.Error("telemetry tracing setup failed", "err", err)
+		os.Exit(1)
+	}
+	metricShutdown, err := telemetry.SetupMetrics(ctx, cfg)
+	if err != nil {
+		log.Error("telemetry metrics setup failed", "err", err)
 		os.Exit(1)
 	}
 
-	txManager := postgres.NewTxManager(pool)
-	repo := postgres.NewTripRepository(pool)
-	idemRepo := postgres.NewIdempotencyRepository(pool)
-	router := httptransport.NewRouter(log, repo, idemRepo, txManager)
-	srv := httptransport.NewServer(cfg.HTTPAddr, log, router)
+	cnt, err := container.New(ctx, cfg, log)
+	if err != nil {
+		log.Error("container init failed", "err", err)
+		os.Exit(1)
+	}
+
+	handler := router.NewRouter(log, cnt.Router, cnt.Metrics)
+
+	srv := &http.Server{
+		Addr:              cfg.HTTPAddr,
+		Handler:           handler,
+		ReadTimeout:       5 * time.Second,
+		ReadHeaderTimeout: 3 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- srv.Start()
+		log.Info("http server starting", "addr", cfg.HTTPAddr)
+		errCh <- srv.ListenAndServe()
 	}()
 
 	stop := make(chan os.Signal, 1)
@@ -49,26 +70,49 @@ func main() {
 
 	select {
 	case err := <-errCh:
-		if err != nil {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("http server failed", "err", err)
-			pool.Close()
+			shutdownAll(log, cfg, nil, nil, traceShutdown, metricShutdown, cnt)
 			os.Exit(1)
 		}
 	case sig := <-stop:
-		log.Info("stop signal received", "signal", sig)
+		log.Info("stop signal received", "signal", sig.String())
 	}
 
+	shutdownAll(log, cfg, srv, nil, traceShutdown, metricShutdown, cnt)
+	log.Info("server stopped")
+}
+
+func shutdownAll(
+	log *slog.Logger,
+	cfg *config.Config,
+	srv *http.Server,
+	_ any, // зарезервировано под будущие компоненты (ЛР3+)
+	traceShutdown telemetry.ShutdownFunc,
+	metricShutdown telemetry.ShutdownFunc,
+	cnt *container.Container,
+) {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Error("graceful shutdown failed", "err", err)
-		pool.Close()
-		os.Exit(1)
+	if srv != nil {
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Error("http shutdown failed", "err", err)
+		}
 	}
 
-	pool.Close()
-	log.Info("server stopped")
+	if traceShutdown != nil {
+		if err := traceShutdown(ctx); err != nil {
+			log.Error("tracer shutdown failed", "err", err)
+		}
+	}
+	if metricShutdown != nil {
+		if err := metricShutdown(ctx); err != nil {
+			log.Error("meter shutdown failed", "err", err)
+		}
+	}
+
+	cnt.Pool.Close()
 }
 
 func newLogger(level string) *slog.Logger {
