@@ -14,11 +14,11 @@ import (
 func (r *Repo) Finish(ctx context.Context, id uuid.UUID, at time.Time) error {
 	q, args, err := r.sb.
 		Update(tableTrips).
-		Set("status", "completed").
+		Set("status", statusCompleted).
 		Set("finished_at", at).
 		Set("updated_at", at).
 		Where(squirrel.Eq{"id": id}).
-		Where(squirrel.Eq{"status": "active"}).
+		Where(squirrel.Eq{"status": statusActive}).
 		ToSql()
 	if err != nil {
 		return fmt.Errorf("build update trip: %w", err)

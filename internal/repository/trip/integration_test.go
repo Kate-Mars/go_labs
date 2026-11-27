@@ -121,8 +121,135 @@ func TestRepo_Finish(t *testing.T) {
 		t.Fatalf("Finish: %v", err)
 	}
 
+	// повторный Finish → ErrAlreadyDone
 	if err := r.Finish(ctx, tr.ID, time.Now().UTC()); !errors.Is(err, trip.ErrAlreadyDone) {
 		t.Errorf("second Finish err = %v, want ErrAlreadyDone", err)
+	}
+}
+
+func TestRepo_SavePosition_UpdatesLastPositionAt(t *testing.T) {
+	r := setup(t)
+	ctx := context.Background()
+
+	tr := newTrip(uuid.New())
+	if err := r.Create(ctx, tr); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Truncate до микросекунд: PostgreSQL TIMESTAMPTZ хранит микросекунды,
+	// time.Now() даёт наносекунды — без Truncate сравнение упадёт.
+	older := time.Now().UTC().Add(-time.Minute).Truncate(time.Microsecond)
+	newer := time.Now().UTC().Truncate(time.Microsecond)
+
+	if _, err := r.SavePosition(ctx, model.Position{
+		TripID: tr.ID, Latitude: 59.9, Longitude: 30.3, RecordedAt: newer,
+	}); err != nil {
+		t.Fatalf("SavePosition newer: %v", err)
+	}
+
+	// старая координата не должна откатить last_position_at
+	if _, err := r.SavePosition(ctx, model.Position{
+		TripID: tr.ID, Latitude: 59.8, Longitude: 30.2, RecordedAt: older,
+	}); err != nil {
+		t.Fatalf("SavePosition older: %v", err)
+	}
+
+	got, err := r.GetByID(ctx, tr.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.LastPositionAt == nil {
+		t.Fatal("LastPositionAt = nil, want non-nil")
+	}
+	if !got.LastPositionAt.Equal(newer) {
+		t.Errorf("LastPositionAt = %v, want %v", got.LastPositionAt, newer)
+	}
+}
+
+func TestRepo_SavePosition_ListPositions(t *testing.T) {
+	r := setup(t)
+	ctx := context.Background()
+
+	tr := newTrip(uuid.New())
+	if err := r.Create(ctx, tr); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	times := []time.Time{now.Add(-2 * time.Minute), now.Add(-time.Minute), now}
+	for i, at := range times {
+		if _, err := r.SavePosition(ctx, model.Position{
+			TripID: tr.ID, Latitude: 59.9 + float64(i), Longitude: 30.3, RecordedAt: at,
+		}); err != nil {
+			t.Fatalf("SavePosition: %v", err)
+		}
+	}
+
+	got, err := r.ListPositions(ctx, tr.ID)
+	if err != nil {
+		t.Fatalf("ListPositions: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("len = %d, want 3", len(got))
+	}
+	for i := 1; i < len(got); i++ {
+		if got[i].RecordedAt.Before(got[i-1].RecordedAt) {
+			t.Errorf("positions not sorted by recorded_at at %d", i)
+		}
+	}
+}
+
+func TestRepo_FindStale(t *testing.T) {
+	r := setup(t)
+	ctx := context.Background()
+
+	// свежая поездка — не должна попасть в выборку
+	fresh := newTrip(uuid.New())
+	if err := r.Create(ctx, fresh); err != nil {
+		t.Fatalf("Create fresh: %v", err)
+	}
+	if _, err := r.SavePosition(ctx, model.Position{
+		TripID: fresh.ID, Latitude: 59.9, Longitude: 30.3, RecordedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("SavePosition fresh: %v", err)
+	}
+
+	// старая поездка — должна попасть
+	stale := newTrip(uuid.New())
+	stale.StartedAt = time.Now().UTC().Add(-2 * time.Hour)
+	if err := r.Create(ctx, stale); err != nil {
+		t.Fatalf("Create stale: %v", err)
+	}
+
+	// завершённая — не должна
+	done := newTrip(uuid.New())
+	done.StartedAt = time.Now().UTC().Add(-2 * time.Hour)
+	if err := r.Create(ctx, done); err != nil {
+		t.Fatalf("Create done: %v", err)
+	}
+	if err := r.Finish(ctx, done.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("Finish done: %v", err)
+	}
+
+	stales, err := r.FindStale(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("FindStale: %v", err)
+	}
+
+	var foundStale bool
+	for _, s := range stales {
+		if s.TripID == stale.ID {
+			foundStale = true
+		}
+		if s.TripID == fresh.ID {
+			t.Errorf("fresh trip %v must not be in stale list", fresh.ID)
+		}
+		if s.TripID == done.ID {
+			t.Errorf("completed trip %v must not be in stale list", done.ID)
+		}
+	}
+	if !foundStale {
+		t.Errorf("stale trip %v not found in FindStale result", stale.ID)
 	}
 }
 

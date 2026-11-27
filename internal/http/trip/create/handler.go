@@ -36,13 +36,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request, params api.Crea
 	}
 	defer r.Body.Close()
 
+	// Первый декодер: в map, чтобы отличить missing/null от нулевого значения.
 	var raw map[string]json.RawMessage
 	dec := json.NewDecoder(bytes.NewReader(body))
 	if err := dec.Decode(&raw); err != nil {
 		invalidRequest(w, h.log, r, "malformed JSON")
 		return
 	}
-
+	// Trailing JSON — на ТОМ ЖЕ декодере.
 	if err := dec.Decode(&struct{}{}); err != io.EOF {
 		invalidRequest(w, h.log, r, "unexpected data after JSON body")
 		return
@@ -53,6 +54,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request, params api.Crea
 		return
 	}
 
+	// Второй декодер: в структуру, со строгой проверкой лишних полей.
 	var req api.TripData
 	strict := json.NewDecoder(bytes.NewReader(body))
 	strict.DisallowUnknownFields()
@@ -60,6 +62,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request, params api.Crea
 		invalidRequest(w, h.log, r, "unknown or invalid fields")
 		return
 	}
+
 	in := uc.Input{
 		UserID:         req.UserId,
 		DriverID:       req.DriverId,
@@ -76,7 +79,6 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request, params api.Crea
 	out, err := h.uc.Do(r.Context(), in)
 	if err != nil {
 		status, p := domainerror.Problem(err)
-		// Логирование ошибки — в middleware.Logging (одно место, с trace_id/span_id).
 		common.Problem(w, h.log, r, status, p)
 		return
 	}

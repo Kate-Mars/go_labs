@@ -24,6 +24,18 @@ func ToAPITrip(t model.Trip) api.Trip {
 		Status:         status,
 		StartedAt:      t.StartedAt,
 		FinishedAt:     t.FinishedAt,
-		LastPositionAt: nil, // для ЛР3
+		LastPositionAt: t.LastPositionAt,
+	}
+}
+
+func ToAPIPosition(p model.Position) api.TripPosition {
+	return api.TripPosition{
+		Id:     p.ID,
+		TripId: p.TripID,
+		Coordinates: api.Coordinates{
+			Latitude:  p.Latitude,
+			Longitude: p.Longitude,
+		},
+		RecordedAt: p.RecordedAt,
 	}
 }

@@ -13,14 +13,17 @@ import (
 	"github.com/Kate-Mars/go_labs/internal/http/trip/create"
 	"github.com/Kate-Mars/go_labs/internal/http/trip/finish"
 	"github.com/Kate-Mars/go_labs/internal/http/trip/get"
+	"github.com/Kate-Mars/go_labs/internal/http/trip/positions"
 )
 
 type Server struct {
-	log    *slog.Logger
-	pool   *pgxpool.Pool
-	create *create.Handler
-	get    *get.Handler
-	finish *finish.Handler
+	log           *slog.Logger
+	pool          *pgxpool.Pool
+	create        *create.Handler
+	get           *get.Handler
+	finish        *finish.Handler
+	positionsSave *positions.SaveHandler
+	positionsList *positions.ListHandler
 }
 
 func NewServer(
@@ -29,13 +32,17 @@ func NewServer(
 	createH *create.Handler,
 	getH *get.Handler,
 	finishH *finish.Handler,
+	positionsSaveH *positions.SaveHandler,
+	positionsListH *positions.ListHandler,
 ) *Server {
 	return &Server{
-		log:    log,
-		pool:   pool,
-		create: createH,
-		get:    getH,
-		finish: finishH,
+		log:           log,
+		pool:          pool,
+		create:        createH,
+		get:           getH,
+		finish:        finishH,
+		positionsSave: positionsSaveH,
+		positionsList: positionsListH,
 	}
 }
 
@@ -49,6 +56,14 @@ func (s *Server) GetTrip(w http.ResponseWriter, r *http.Request, tripId api.Trip
 
 func (s *Server) FinishTrip(w http.ResponseWriter, r *http.Request, tripId api.TripId) {
 	s.finish.Finish(w, r, tripId)
+}
+
+func (s *Server) CreateTripPosition(w http.ResponseWriter, r *http.Request, tripId api.TripId) {
+	s.positionsSave.CreateTripPosition(w, r, tripId)
+}
+
+func (s *Server) ListTripPositions(w http.ResponseWriter, r *http.Request, tripId api.TripId) {
+	s.positionsList.ListTripPositions(w, r, tripId)
 }
 
 //nolint:unparam // r нужен по сигнатуре api.ServerInterface
@@ -66,16 +81,6 @@ func (s *Server) Ready(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, api.HealthResponse{Status: api.Ok})
-}
-
-//nolint:unparam // tripId в ЛР3
-func (s *Server) CreateTripPosition(w http.ResponseWriter, r *http.Request, tripId api.TripId) {
-	http.NotFound(w, r)
-}
-
-//nolint:unparam // tripId в ЛР3
-func (s *Server) ListTripPositions(w http.ResponseWriter, r *http.Request, tripId api.TripId) {
-	http.NotFound(w, r)
 }
 
 func (s *Server) writeJSON(w http.ResponseWriter, status int, body any) {

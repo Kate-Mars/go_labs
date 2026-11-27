@@ -27,6 +27,15 @@ type Config struct {
 	OTELTracesSamplerArg   string
 	OTELResourceAttributes string
 	ServiceVersion         string
+
+	// ЛР3: опрос устаревших поездок
+	PositionCheckInterval time.Duration
+	PositionStaleAfter    time.Duration
+	PositionWorkers       int32
+	PositionQueueSize     int32
+
+	PushHTTPURL        string
+	PushRequestTimeout time.Duration
 }
 
 func Load() (*Config, error) {
@@ -38,6 +47,9 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if cfg.DatabaseURL, err = requireEnv("DATABASE_URL"); err != nil {
+		return nil, err
+	}
+	if cfg.PushHTTPURL, err = requireEnv("PUSH_HTTP_URL"); err != nil {
 		return nil, err
 	}
 
@@ -72,6 +84,23 @@ func Load() (*Config, error) {
 	cfg.OTELResourceAttributes = getEnv("OTEL_RESOURCE_ATTRIBUTES", "")
 	cfg.ServiceVersion = detectVersion()
 
+	// --- ЛР3: опрос устаревших поездок ---
+	if cfg.PositionCheckInterval, err = getEnvDuration("POSITION_CHECK_INTERVAL", 30*time.Second); err != nil {
+		return nil, err
+	}
+	if cfg.PositionStaleAfter, err = getEnvDuration("POSITION_STALE_AFTER", 60*time.Second); err != nil {
+		return nil, err
+	}
+	if cfg.PositionWorkers, err = getEnvInt32("POSITION_WORKERS", 4); err != nil {
+		return nil, err
+	}
+	if cfg.PositionQueueSize, err = getEnvInt32("POSITION_QUEUE_SIZE", 100); err != nil {
+		return nil, err
+	}
+	if cfg.PushRequestTimeout, err = getEnvDuration("PUSH_REQUEST_TIMEOUT", time.Second); err != nil {
+		return nil, err
+	}
+
 	// --- валидация ---
 	if cfg.ShutdownTimeout <= 0 {
 		return nil, fmt.Errorf("SHUTDOWN_TIMEOUT must be > 0, got %s", cfg.ShutdownTimeout)
@@ -98,6 +127,22 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("OTEL_TRACES_SAMPLER has unsupported value %q", cfg.OTELTracesSampler)
 	}
 
+	if cfg.PositionCheckInterval <= 0 {
+		return nil, fmt.Errorf("POSITION_CHECK_INTERVAL must be > 0, got %s", cfg.PositionCheckInterval)
+	}
+	if cfg.PositionStaleAfter <= 0 {
+		return nil, fmt.Errorf("POSITION_STALE_AFTER must be > 0, got %s", cfg.PositionStaleAfter)
+	}
+	if cfg.PositionWorkers <= 0 {
+		return nil, fmt.Errorf("POSITION_WORKERS must be > 0, got %d", cfg.PositionWorkers)
+	}
+	if cfg.PositionQueueSize <= 0 {
+		return nil, fmt.Errorf("POSITION_QUEUE_SIZE must be > 0, got %d", cfg.PositionQueueSize)
+	}
+	if cfg.PushRequestTimeout <= 0 {
+		return nil, fmt.Errorf("PUSH_REQUEST_TIMEOUT must be > 0, got %s", cfg.PushRequestTimeout)
+	}
+
 	return cfg, nil
 }
 
@@ -111,7 +156,6 @@ func detectVersion() string {
 	if info.Main.Version != "" && info.Main.Version != "(devel)" {
 		return info.Main.Version
 	}
-	// ищем vcs.revision
 	for _, s := range info.Settings {
 		if s.Key == "vcs.revision" && len(s.Value) >= 7 {
 			return s.Value[:7]

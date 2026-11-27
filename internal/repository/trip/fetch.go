@@ -20,7 +20,7 @@ func (r *Repo) GetByID(ctx context.Context, id uuid.UUID) (model.Trip, error) {
 			"start_latitude", "start_longitude",
 			"end_latitude", "end_longitude",
 			"price", "status",
-			"started_at", "finished_at",
+			"started_at", "finished_at", "last_position_at",
 			"created_at", "updated_at",
 		).
 		From(tableTrips).
@@ -51,7 +51,7 @@ func scanTrip(row pgx.Row) (model.Trip, error) {
 		&t.StartLatitude, &t.StartLongitude,
 		&t.EndLatitude, &t.EndLongitude,
 		&t.Price, &status,
-		&t.StartedAt, &t.FinishedAt,
+		&t.StartedAt, &t.FinishedAt, &t.LastPositionAt,
 		&t.CreatedAt, &t.UpdatedAt,
 	)
 	if err != nil {

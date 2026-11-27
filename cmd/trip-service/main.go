@@ -48,6 +48,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	appCtx, appCancel := context.WithCancel(context.Background())
+	cnt.Positions.Start(appCtx)
+
 	handler := router.NewRouter(log, cnt.Router, cnt.Metrics)
 
 	srv := &http.Server{
@@ -72,14 +75,14 @@ func main() {
 	case err := <-errCh:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("http server failed", "err", err)
-			shutdownAll(log, cfg, nil, nil, traceShutdown, metricShutdown, cnt)
+			shutdownAll(log, cfg, srv, cnt, appCancel, traceShutdown, metricShutdown)
 			os.Exit(1)
 		}
 	case sig := <-stop:
 		log.Info("stop signal received", "signal", sig.String())
 	}
 
-	shutdownAll(log, cfg, srv, nil, traceShutdown, metricShutdown, cnt)
+	shutdownAll(log, cfg, srv, cnt, appCancel, traceShutdown, metricShutdown)
 	log.Info("server stopped")
 }
 
@@ -87,10 +90,10 @@ func shutdownAll(
 	log *slog.Logger,
 	cfg *config.Config,
 	srv *http.Server,
-	_ any, // зарезервировано под будущие компоненты (ЛР3+)
+	cnt *container.Container,
+	appCancel context.CancelFunc,
 	traceShutdown telemetry.ShutdownFunc,
 	metricShutdown telemetry.ShutdownFunc,
-	cnt *container.Container,
 ) {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
@@ -100,6 +103,13 @@ func shutdownAll(
 			log.Error("http shutdown failed", "err", err)
 		}
 	}
+
+	if cnt.Positions != nil {
+		if err := cnt.Positions.Stop(ctx); err != nil {
+			log.Error("positions manager stop failed", "err", err)
+		}
+	}
+	appCancel()
 
 	if traceShutdown != nil {
 		if err := traceShutdown(ctx); err != nil {
@@ -112,7 +122,9 @@ func shutdownAll(
 		}
 	}
 
-	cnt.Pool.Close()
+	if cnt != nil && cnt.Pool != nil {
+		cnt.Pool.Close()
+	}
 }
 
 func newLogger(level string) *slog.Logger {

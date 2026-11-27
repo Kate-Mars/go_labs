@@ -25,6 +25,7 @@ type Trip struct {
 	Status         Status
 	StartedAt      time.Time
 	FinishedAt     *time.Time
+	LastPositionAt *time.Time
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }

@@ -14,6 +14,7 @@ import (
 const (
 	tableTrips         = "trips"
 	tableStatusHistory = "trip_status_history"
+	tablePositions     = "trip_positions"
 )
 
 const (
