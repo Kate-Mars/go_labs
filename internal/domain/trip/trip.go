@@ -35,3 +35,13 @@ type StatusChange struct {
 	ToStatus   Status
 	Reason     string
 }
+
+func (t *Trip) Finish(at time.Time) error {
+	if t.Status != StatusActive {
+		return ErrAlreadyDone
+	}
+	t.Status = StatusCompleted
+	t.FinishedAt = &at
+	t.UpdatedAt = at
+	return nil
+}

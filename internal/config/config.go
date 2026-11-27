@@ -18,14 +18,16 @@ type Config struct {
 	DatabaseMaxConnLifetime time.Duration
 	DatabaseConnectTimeout  time.Duration
 	DatabaseQueryTimeout    time.Duration
-}
 
-// Load() (*Config, error)
+	OTELEndpoint    string
+	OTELServiceName string
+}
 
 func Load() (*Config, error) {
 	cfg := &Config{}
 	var err error
 
+	// --- обязательные ---
 	if cfg.HTTPAddr, err = requireEnv("HTTP_ADDR"); err != nil {
 		return nil, err
 	}
@@ -33,6 +35,7 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	// --- с дефолтами ---
 	cfg.LogLevel = getEnv("LOG_LEVEL", "info")
 
 	if cfg.ShutdownTimeout, err = getEnvDuration("SHUTDOWN_TIMEOUT", 10*time.Second); err != nil {
@@ -54,6 +57,11 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	// --- телеметрия (ЛР2) ---
+	cfg.OTELEndpoint = getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4318")
+	cfg.OTELServiceName = getEnv("OTEL_SERVICE_NAME", "trip-service")
+
+	// --- валидация ---
 	if cfg.ShutdownTimeout <= 0 {
 		return nil, fmt.Errorf("SHUTDOWN_TIMEOUT must be > 0, got %s", cfg.ShutdownTimeout)
 	}
@@ -68,7 +76,7 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// require
+// --- хелперы ---
 
 func requireEnv(key string) (string, error) {
 	v := os.Getenv(key)
@@ -77,8 +85,6 @@ func requireEnv(key string) (string, error) {
 	}
 	return v, nil
 }
-
-// get
 
 func getEnv(key, def string) string {
 	if v := os.Getenv(key); v != "" {
